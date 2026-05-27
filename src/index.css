@@ -21,6 +21,15 @@ body {
   box-sizing: border-box;
   position: relative;
   overflow: hidden; 
+  page-break-inside: avoid;
+  page-break-after: always;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
 }
 
 /* 這是「隱藏列印區」的關鍵樣式 */
