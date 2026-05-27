@@ -9,8 +9,12 @@ import { getROCDate, compressImage } from './utils/helpers';
 export default function App() {
     const [view, setView] = useState('photo'); 
     const [entries, setEntries] = useState(() => {
-        const saved = localStorage.getItem('site_report_data');
-        return saved ? JSON.parse(saved).map(e => ({...e, images: e.images || []})) : [{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }];
+        try {
+            const saved = localStorage.getItem('site_report_data');
+            return saved ? JSON.parse(saved).map(e => ({...e, images: e.images || []})) : [{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }];
+        } catch {
+            return [{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }];
+        }
     });
     const [reportTitle, setReportTitle] = useState(() => localStorage.getItem('site_report_title') || '施工照片');
     const [isGenerating, setIsGenerating] = useState(false);
