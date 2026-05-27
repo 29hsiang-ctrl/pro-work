@@ -1,0 +1,6 @@
+{
+  "name": "Pro Work App",
+  "description": "A migrated photo and PDF application from GitHub.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
