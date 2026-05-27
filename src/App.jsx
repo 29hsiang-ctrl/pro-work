@@ -3,6 +3,7 @@ import html2pdf from 'html2pdf.js';
 import { Icons } from './components/icons';
 import { EntryEditor } from './components/EntryEditor';
 import { MeasurementRecorder } from './components/MeasurementRecorder';
+import { CodeMeasurementRecorder } from './components/CodeMeasurementRecorder';
 import { PreviewPage } from './components/PreviewPage';
 import { getROCDate, compressImage } from './utils/helpers';
 
@@ -69,11 +70,12 @@ export default function App() {
             <div className="max-w-6xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex flex-col gap-2">
                     <h1 className="text-2xl font-bold flex items-center gap-2">🏗️ PRO事一堆</h1>
-                    <div className="flex items-center gap-4">
-                        <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <div className="flex bg-gray-200 p-1 rounded-lg shadow-inner gap-1 flex-wrap">
                             <button onClick={()=>setView('photo')} className={`px-4 py-1 text-xs rounded-md transition-all ${view==='photo'?'bg-white shadow text-blue-600 font-bold':'text-gray-500 hover:text-gray-700'}`}>照片黏貼</button>
                             <button onClick={()=>setView('dimension')} className={`px-4 py-1 text-xs rounded-md transition-all ${view==='dimension'?'bg-white shadow text-blue-600 font-bold':'text-gray-500 hover:text-gray-700'}`}>四周量測</button>
                             <button onClick={()=>setView('twoSide')} className={`px-4 py-1 text-xs rounded-md transition-all ${view==='twoSide'?'bg-white shadow text-blue-600 font-bold':'text-gray-500 hover:text-gray-700'}`}>兩側量測</button>
+                            <button onClick={()=>setView('code')} className={`px-4 py-1 text-xs rounded-md transition-all ${view==='code'?'bg-white shadow text-blue-600 font-bold':'text-gray-500 hover:text-gray-700'}`}>代號量測</button>
                         </div>
                         {view === 'photo' && <div className="flex items-center gap-2 border-b border-gray-400 pb-0.5 font-bold font-sans italic"><label className="text-xs text-gray-500">標題:</label><input type="text" value={reportTitle} onChange={e=>setReportTitle(e.target.value)} className="bg-transparent outline-none w-32" /></div>}
                     </div>
@@ -101,8 +103,10 @@ export default function App() {
                 </div>
             ) : view === 'dimension' ? (
                 <MeasurementRecorder key="horiz" defaultTitle="四周量測尺寸" mode="full" />
-            ) : (
+            ) : view === 'twoSide' ? (
                 <MeasurementRecorder key="twoSide" defaultTitle="兩側量測尺寸" mode="widthOnly" />
+            ) : (
+                <CodeMeasurementRecorder key="codeMeasure" defaultTitle="代號量測尺寸" />
             )}
             
             {(isProcessing || isGenerating) && <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center font-bold text-white backdrop-blur-sm shadow-2xl font-sans"><Icons.Loader />處理中，請稍候...</div>}
