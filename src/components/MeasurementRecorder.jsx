@@ -32,8 +32,8 @@ export const MeasurementRecorder = ({ defaultTitle, mode = 'full' }) => {
     };
 
     const addRow = () => {
-        if (isFull && (!form.length || !form.width)) return alert("請輸入數字！");
-        if (!isFull && !form.width) return alert("請輸入寬度！");
+        if (isFull && (!form.length || !form.width)) return;
+        if (!isFull && !form.width) return;
         const finalW = calcFinal(form.width, wMode);
         const statusStr = isFull ? `長:${lMode} 寬:${wMode}` : `寬:${wMode}`;
         const newEntry = { id: Date.now(), direction: form.direction, floor: form.floor, type: statusStr, measureW: form.width, finalW: finalW };
@@ -44,10 +44,10 @@ export const MeasurementRecorder = ({ defaultTitle, mode = 'full' }) => {
         else widthInputRef.current?.focus();
     };
 
-    const clearTable = () => { if(confirm(`確定要重置嗎？`)) setTableData([]); };
+    const clearTable = () => { setTableData([]); };
 
     const exportExcel = () => {
-        if(tableData.length === 0) return alert("沒數據！");
+        if(tableData.length === 0) return;
         const headers = isFull ? ["#", "方位", "樓層", "狀態", "量測-長", "量測-寬", "最終-長", "最終-寬"] : ["#", "方位", "樓層", "狀態", "量測-寬", "最終-寬"];
         const rows = tableData.map((r, i) => isFull ? [i+1, r.direction, r.floor, r.type, r.measureL, r.measureW, r.finalL, r.finalW] : [i+1, r.direction, r.floor, r.type, r.measureW, r.finalW]);
         const csvContent = "\uFEFF" + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
@@ -59,9 +59,9 @@ export const MeasurementRecorder = ({ defaultTitle, mode = 'full' }) => {
     };
 
     const generatePDF = () => {
-        if(tableData.length === 0) return alert("沒數據！");
+        if(tableData.length === 0) return;
         setIsGenerating(true);
-        const opt = { margin: 10, filename: `${dimTitle}_${getROCDate()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: isFull ? 'landscape' : 'portrait' } };
+        const opt = { margin: 10, filename: `${dimTitle}_${getROCDate()}.pdf`, image: { type: 'jpeg', quality: 0.6 }, html2canvas: { scale: 1 }, jsPDF: { unit: 'mm', format: 'a4', orientation: isFull ? 'landscape' : 'portrait' } };
         html2pdf().set(opt).from(pdfRef.current).save().then(() => setIsGenerating(false));
     };
 

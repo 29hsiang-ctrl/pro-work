@@ -15,7 +15,17 @@ export const PreviewPage = ({ pageItems, pageIndex, totalPages, reportTitle }) =
                         </td>
                         <td className="border border-black p-1 align-middle text-center bg-white">
                             <div className="w-full h-full flex gap-1 items-center justify-center" style={{ height: '78mm' }}>
-                                {entry.images?.slice(0, 2).map((img, i) => <img key={i} src={img.preview} alt={`preview-${i}`} className="w-1/2 h-full object-contain" />)}
+                                {entry.images?.slice(0, 2).map((img, i) => (
+                                    <div key={i} className="relative w-1/2 h-full flex items-center justify-center overflow-hidden">
+                                        <div 
+                                            className="absolute top-1 left-1 z-10 bg-white text-red-600 font-bold px-1.5 py-0.5 whitespace-pre-wrap text-[11pt] text-left break-all" 
+                                            style={{ maxWidth: '90%' }}
+                                        >
+                                            {[entry.date, entry.floor, entry.direction, entry.item].filter(Boolean).join('-')}
+                                        </div>
+                                        <img src={img.preview} alt={`preview-${i}`} className="w-full h-full object-contain" />
+                                    </div>
+                                ))}
                             </div>
                         </td>
                     </tr>

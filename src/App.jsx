@@ -1,3 +1,5 @@
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { useState, useRef, useEffect } from 'react';
 import html2pdf from 'html2pdf.js';
 import { Icons } from './components/icons';
@@ -42,7 +44,7 @@ export default function App() {
             if (remainingSlots <= 0) return;
             const processed = [];
             for(let file of files.slice(0, remainingSlots)) {
-                try { const preview = await compressImage(file); processed.push({ preview }); } catch (err) { console.error(err); }
+                try { const preview = await compressImage(file, 600, 0.4); processed.push({ preview }); } catch (err) { console.error(err); }
             }
             if (processed.length > 0) {
                 setEntries(prev => prev.map(ent => ent.id === id ? { ...ent, images: [...ent.images, ...processed].slice(0, 2) } : ent));
@@ -56,9 +58,116 @@ export default function App() {
     const generatePDF = () => {
         setIsGenerating(true);
         setTimeout(() => {
-            const opt = { margin: 0, filename: `${reportTitle}_${getROCDate()}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+            const opt = { margin: 0, filename: `${reportTitle}_${getROCDate()}.pdf`, image: { type: 'jpeg', quality: 0.6 }, html2canvas: { scale: 1 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
             html2pdf().set(opt).from(reportRef.current).save().then(() => setIsGenerating(false));
         }, 800);
+    };
+
+    const generateImage = async () => {
+        setIsGenerating(true);
+        try {
+            const filesToShare = [];
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+                if (!entry.images || entry.images.length === 0) continue;
+                
+                const watermarkText = [entry.date, entry.floor, entry.direction, entry.item].filter(Boolean).join('-');
+                
+                for (let j = 0; j < entry.images.length; j++) {
+                    const imgObj = entry.images[j];
+                    const imgDataUrl = imgObj.preview;
+                    
+                    const img = new Image();
+                    img.src = imgDataUrl;
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                    });
+                    
+                    if (!img.width || !img.height) continue;
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 背景填滿預防透明PNG
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    if (watermarkText) {
+                        const fontSize = Math.max(18, Math.floor(canvas.width * 0.025)); 
+                        ctx.font = `bold ${fontSize}px sans-serif`;
+                        
+                        const paddingX = fontSize * 0.4;
+                        const paddingY = fontSize * 0.2;
+                        const textMetrics = ctx.measureText(watermarkText);
+                        const textWidth = textMetrics.width;
+                        const lineHeight = fontSize * 1.2;
+                        
+                        // 位置在左上角
+                        const rectX = Math.floor(canvas.width * 0.02);
+                        const rectY = Math.floor(canvas.height * 0.02);
+                        const rectWidth = textWidth + paddingX * 2;
+                        const rectHeight = lineHeight + paddingY * 2;
+                        
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                        ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
+                        
+                        ctx.fillStyle = '#dc2626'; // tailwind red-600
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(watermarkText, rectX + paddingX, rectY + paddingY + (lineHeight - fontSize) / 2);
+                    }
+                    
+                    const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+                    if (imageBlob) {
+                        const filename = `${watermarkText ? watermarkText.replace(/[\/\\?%*:|"<>]/g, '-') : '現場照片'}_${i+1}_${j+1}.jpg`;
+                        filesToShare.push(new File([imageBlob], filename, { type: 'image/jpeg' }));
+                    }
+                }
+            }
+            
+            if (filesToShare.length > 0) {
+                const downloadIndividualFiles = (files) => {
+                    files.forEach((file, index) => {
+                        setTimeout(() => {
+                            const url = URL.createObjectURL(file);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = file.name;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                        }, index * 300);
+                    });
+                };
+
+                if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
+                    try {
+                        await navigator.share({
+                            files: filesToShare,
+                            title: '施工照片',
+                        });
+                    } catch (e) {
+                        if (e.name !== 'AbortError') {
+                            downloadIndividualFiles(filesToShare);
+                        }
+                    }
+                } else {
+                    downloadIndividualFiles(filesToShare);
+                }
+            } else {
+                alert('沒有可輸出的照片');
+            }
+        } catch (err) {
+            console.error('Failed to export photos', err);
+            alert('照片輸出失敗: ' + err.message);
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const chunkedEntries = [];
@@ -82,9 +191,10 @@ export default function App() {
                 </div>
                 {view === 'photo' && (
                     <div className="flex gap-2">
-                        <button onClick={() => {if(confirm("確定重置？")) { localStorage.clear(); window.location.reload(); }}} className="text-xs text-red-400 px-2 font-bold font-sans">重置</button>
+                        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-xs text-red-400 px-2 font-bold font-sans">重置</button>
                         <button onClick={() => setEntries([...entries, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }])} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold shadow">+ 新增單筆</button>
-                        <button onClick={generatePDF} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow">下載 PDF</button>
+                        <button onClick={generateImage} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold shadow">輸出圖片</button>
+                        <button onClick={generatePDF} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow">生成 PDF</button>
                     </div>
                 )}
             </div>

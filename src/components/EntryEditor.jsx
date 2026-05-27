@@ -23,9 +23,12 @@ export const EntryEditor = ({ entry, index, total, onMove, onRemove, onChange, o
                     <label className="block text-sm font-medium text-gray-700 mb-1">現場照片 ({entry.images?.length || 0}/2)</label>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                         {entry.images?.map((img, idx) => (
-                            <div key={idx} className="relative aspect-square border rounded-lg overflow-hidden">
-                                <img src={img.preview} alt={`preview-${idx}`} className="w-full h-full object-cover" loading="lazy" />
-                                <button onClick={() => onRemoveImage(entry.id, idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-80"><Icons.X /></button>
+                            <div key={idx} className="relative aspect-square border rounded-lg overflow-hidden flex items-center justify-center bg-gray-50 group">
+                                <div className="absolute top-1 left-1 bg-white text-red-600 font-bold px-1 py-[2px] text-[10px] break-all max-w-[90%] shadow-sm z-10 pointer-events-none">
+                                    {[entry.date, entry.floor, entry.direction, entry.item].filter(Boolean).join('-')}
+                                </div>
+                                <img src={img.preview} alt={`preview-${idx}`} className="w-full h-full object-contain" loading="lazy" />
+                                <button onClick={() => onRemoveImage(entry.id, idx)} className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-20"><Icons.X /></button>
                             </div>
                         ))}
                     </div>

@@ -20,7 +20,6 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
             setRefImage(preview);
         } catch (err) {
             console.error(err);
-            alert("圖片處理失敗！");
         }
         e.target.value = '';
     };
@@ -42,7 +41,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
     };
 
     const copyPrevious = (code) => {
-        if (tableData.length === 0) return alert("沒有上一筆資料！");
+        if (tableData.length === 0) return;
         const lastVal = tableData[tableData.length - 1].values[code];
         if (lastVal !== undefined && lastVal !== '') {
             setForm(prev => ({ ...prev, values: { ...prev.values, [code]: lastVal } }));
@@ -51,7 +50,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
 
     const addRow = () => {
         const hasAnyValue = codes.some(c => form.values[c]?.trim());
-        if (!hasAnyValue) return alert("請至少輸入一個代號的尺寸！");
+        if (!hasAnyValue) return;
         
         const newEntry = { 
             id: Date.now(), 
@@ -63,10 +62,10 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
         setForm(prev => ({ ...prev, values: {} }));
     };
 
-    const clearTable = () => { if(confirm(`確定要重置表格資料嗎？`)) setTableData([]); };
+    const clearTable = () => { setTableData([]); };
 
     const exportExcel = () => {
-        if(tableData.length === 0) return alert("沒數據！");
+        if(tableData.length === 0) return;
         const headers = ["#", "方位", "樓層", ...codes];
         const rows = tableData.map((r, i) => [i+1, r.direction, r.floor, ...codes.map(c => r.values[c] || '')]);
         const csvContent = "\uFEFF" + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
@@ -78,13 +77,13 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
     };
 
     const generatePDF = () => {
-        if(tableData.length === 0) return alert("沒數據！");
+        if(tableData.length === 0) return;
         setIsGenerating(true);
         const opt = { 
             margin: 10, 
             filename: `${dimTitle}_${getROCDate()}.pdf`, 
-            image: { type: 'jpeg', quality: 0.98 }, 
-            html2canvas: { scale: 2 }, 
+            image: { type: 'jpeg', quality: 0.6 }, 
+            html2canvas: { scale: 1 }, 
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
         };
         html2pdf().set(opt).from(pdfRef.current).save().then(() => setIsGenerating(false));
