@@ -1,1 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;700&display=swap');
+
 @import "tailwindcss";
+
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background-color: #f3f4f6;
+}
+
+.font-kai {
+  font-family: 'BiauKai', 'DFKai-SB', '標楷體', 'KaiTi', '楷体', 'Noto Serif TC', serif !important;
+}
+
+/* 核心 A4 設定 */
+.page-container {
+  background: white;
+  width: 210mm;
+  height: 296mm; /* 強制高度 */
+  padding: 15mm;
+  margin: 0 auto; /* 移除底部 margin，因為它是在背景生成的 */
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden; 
+}
+
+/* 這是「隱藏列印區」的關鍵樣式 */
+#hidden-print-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -100; /* 藏在最下面 */
+  opacity: 0;    /* 讓使用者看不到，但瀏覽器看得到 (html2canvas 需要它可見) */
+  pointer-events: none;
+  width: 210mm;
+}
+
+/* 載入遮罩 */
+.processing-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8); /* 改深色背景比較清楚 */
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center; flex-direction: column;
+  color: white;
+}
+
+img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
