@@ -97,7 +97,7 @@ export default function App() {
                 const entry = entries[i];
                 if (!entry.images || entry.images.length === 0) continue;
                 
-                const watermarkText = [entry.date, entry.floor, entry.direction, entry.item].filter(Boolean).join('-');
+                const watermarkText = [entry.date, entry.floor, entry.direction, entry.item, entry.content].filter(Boolean).join('-');
                 
                 for (let j = 0; j < entry.images.length; j++) {
                     const imgObj = entry.images[j];
