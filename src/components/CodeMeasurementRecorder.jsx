@@ -48,6 +48,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
         }
     };
 
+
     const addRow = () => {
         const hasAnyValue = codes.some(c => form.values[c]?.trim());
         if (!hasAnyValue) return;
