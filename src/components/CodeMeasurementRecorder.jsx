@@ -156,7 +156,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
                     <div className="grid grid-cols-3 gap-3">
                         {['北', '西', '東', '南'].map((d) => (
                             <div key={d} className={`${d==='北'?'col-start-2':d==='西'?'col-start-1 row-start-2':d==='東'?'col-start-3 row-start-2':'col-start-2 row-start-3'}`}>
-                                <button onClick={()=>setForm({...form, direction:d})} className={`w-14 h-14 rounded-full border-4 font-black transition-all active:scale-90 ${form.direction===d?'bg-blue-600 text-white border-blue-800 shadow-lg':'bg-white text-gray-300 border-gray-200 hover:border-gray-300'}`}>{d}</button>
+                                <button onClick={()=>setForm(prev=>({...prev, direction:d}))} className={`w-14 h-14 rounded-full border-4 font-black transition-all active:scale-90 ${form.direction===d?'bg-blue-600 text-white border-blue-800 shadow-lg':'bg-white text-gray-300 border-gray-200 hover:border-gray-300'}`}>{d}</button>
                             </div>
                         ))}
                         <div className="col-start-2 row-start-2 flex items-center justify-center"><div className="w-3 h-3 bg-black rounded-full shadow-sm"></div></div>
@@ -168,7 +168,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
                     <div className="flex flex-col sm:flex-row gap-4 items-end">
                         <div className="w-full sm:w-1/3">
                             <label className="block text-xs font-black text-gray-500 mb-1 ml-1">選擇樓層</label>
-                            <select value={form.floor} onChange={e=>setForm({...form, floor:e.target.value})} className="w-full border-2 border-gray-300 rounded-2xl p-4 font-black bg-white focus:border-blue-500 shadow-sm text-lg outline-none">
+                            <select value={form.floor} onChange={e=>{const f=e.target.value;setForm(prev=>({...prev, floor:f}));}} className="w-full border-2 border-gray-300 rounded-2xl p-4 font-black bg-white focus:border-blue-500 shadow-sm text-lg outline-none">
                                 {FLOOR_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}
                             </select>
                         </div>
@@ -181,7 +181,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
                                 <div key={c} className="flex flex-col gap-1 border border-gray-100 rounded-xl p-2 bg-gray-50">
                                     <div className="flex items-center gap-2">
                                         <span className="font-black text-xl w-6 text-center text-gray-700">{c}:</span>
-                                        <input type="number" value={form.values[c] || ''} onChange={e => setForm({...form, values: {...form.values, [c]: e.target.value}})} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} placeholder="尺寸" className="flex-1 w-full border-2 border-gray-300 rounded-lg p-2 text-center text-lg font-bold focus:border-blue-500 outline-none bg-white" />
+                                        <input type="number" value={form.values[c] || ''} onChange={e => { const v = e.target.value; setForm(prev => ({...prev, values: {...prev.values, [c]: v}})); }} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} placeholder="尺寸" className="flex-1 w-full border-2 border-gray-300 rounded-lg p-2 text-center text-lg font-bold focus:border-blue-500 outline-none bg-white" />
                                     </div>
                                     <div className="flex justify-end pt-1">
                                         <button onClick={() => copyPrevious(c)} className="text-[10px] bg-gray-200 text-gray-600 font-bold px-2 py-1 rounded hover:bg-gray-300 transition-colors">↑ 上筆相同</button>
