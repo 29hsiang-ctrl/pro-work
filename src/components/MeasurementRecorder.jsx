@@ -109,7 +109,7 @@ export const MeasurementRecorder = ({ defaultTitle, mode = 'full' }) => {
                         ))}
                         <div className="col-start-2 row-start-2 flex items-center justify-center"><div className="w-3 h-3 bg-black rounded-full shadow-sm"></div></div>
                     </div>
-                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border-2 border-gray-200 shadow-sm"><span className="text-xs font-black text-gray-500">磁磚厚度:</span><input type="text" value={form.thickness} onChange={e=>setForm({...form, thickness:e.target.value})} className="w-12 text-center font-black text-blue-600 text-lg outline-none" /></div>
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border-2 border-gray-200 shadow-sm"><span className="text-xs font-black text-gray-500">磁磚厚度:</span><input type="number" inputMode="decimal" enterKeyHint="done" value={form.thickness} onChange={e=>setForm({...form, thickness:e.target.value})} className="w-12 text-center font-black text-blue-600 text-lg outline-none" /></div>
                 </div>
                 <div className="flex flex-col items-center justify-center space-y-4 lg:border-r lg:pr-6">
                     <div className={`grid ${isFull ? 'grid-cols-2' : 'grid-cols-1'} gap-4 w-full h-full items-center`}>
@@ -120,8 +120,8 @@ export const MeasurementRecorder = ({ defaultTitle, mode = 'full' }) => {
                 <div className="space-y-4 flex flex-col justify-center">
                     <select value={form.floor} onChange={e=>setForm({...form, floor:e.target.value})} className="w-full border-2 border-gray-300 rounded-2xl p-4 font-black bg-white focus:border-blue-500 shadow-sm text-lg outline-none font-bold">{FLOOR_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}</select>
                     <div className="space-y-3">
-                        {isFull && (<input ref={lengthInputRef} type="number" placeholder="量測-長 (mm)" value={form.length} onChange={e=>setForm({...form, length:e.target.value})} onKeyDown={(e) => { if(e.key === 'Enter') widthInputRef.current?.focus(); }} className="w-full border-2 border-gray-300 rounded-2xl p-4 text-center text-2xl font-bold focus:border-blue-500 outline-none" />)}
-                        <input ref={widthInputRef} type="number" placeholder="量測-寬 (mm)" value={form.width} onChange={e=>setForm({...form, width:e.target.value})} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} className="w-full border-2 border-gray-300 rounded-2xl p-4 text-center text-2xl font-bold focus:border-blue-500 outline-none" />
+                        {isFull && (<input ref={lengthInputRef} type="number" inputMode="decimal" enterKeyHint="next" placeholder="量測-長 (mm)" value={form.length} onChange={e=>setForm({...form, length:e.target.value})} onKeyDown={(e) => { if(e.key === 'Enter') widthInputRef.current?.focus(); }} className="w-full border-2 border-gray-300 rounded-2xl p-4 text-center text-2xl font-bold focus:border-blue-500 outline-none" />)}
+                        <input ref={widthInputRef} type="number" inputMode="decimal" enterKeyHint="done" placeholder="量測-寬 (mm)" value={form.width} onChange={e=>setForm({...form, width:e.target.value})} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} className="w-full border-2 border-gray-300 rounded-2xl p-4 text-center text-2xl font-bold focus:border-blue-500 outline-none" />
                     </div>
                     <button onClick={addRow} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-2xl hover:bg-blue-700 shadow-xl active:scale-95 transition-all">登入下一筆</button>
                 </div>

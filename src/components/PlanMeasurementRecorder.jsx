@@ -114,6 +114,8 @@ export const PlanMeasurementRecorder = ({ defaultTitle }) => {
                             <span className="font-black text-lg text-gray-700">{c}:</span>
                             <input
                                 type="number"
+                                inputMode="decimal"
+                                enterKeyHint="done"
                                 value={values[c] || ''}
                                 onChange={e => setValues(prev => ({ ...prev, [c]: e.target.value }))}
                                 placeholder="尺寸"

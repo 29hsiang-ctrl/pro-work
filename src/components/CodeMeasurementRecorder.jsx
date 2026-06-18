@@ -182,7 +182,7 @@ export const CodeMeasurementRecorder = ({ defaultTitle }) => {
                                 <div key={c} className="flex flex-col gap-1 border border-gray-100 rounded-xl p-2 bg-gray-50">
                                     <div className="flex items-center gap-2">
                                         <span className="font-black text-xl w-6 text-center text-gray-700">{c}:</span>
-                                        <input type="number" value={form.values[c] || ''} onChange={e => setForm({...form, values: {...form.values, [c]: e.target.value}})} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} placeholder="尺寸" className="flex-1 w-full border-2 border-gray-300 rounded-lg p-2 text-center text-lg font-bold focus:border-blue-500 outline-none bg-white" />
+                                        <input type="number" inputMode="decimal" enterKeyHint="done" value={form.values[c] || ''} onChange={e => setForm({...form, values: {...form.values, [c]: e.target.value}})} onKeyDown={(e) => { if(e.key === 'Enter') addRow(); }} placeholder="尺寸" className="flex-1 w-full border-2 border-gray-300 rounded-lg p-2 text-center text-lg font-bold focus:border-blue-500 outline-none bg-white" />
                                     </div>
                                     <div className="flex justify-end pt-1">
                                         <button onClick={() => copyPrevious(c)} className="text-[10px] bg-gray-200 text-gray-600 font-bold px-2 py-1 rounded hover:bg-gray-300 transition-colors">↑ 上筆相同</button>
