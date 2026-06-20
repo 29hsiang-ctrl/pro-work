@@ -1,0 +1,43 @@
+import { getDb, ok, err } from './lib/mongodb.js';
+
+export const handler = async (event) => {
+    if (event.httpMethod === 'OPTIONS') return ok({});
+    try {
+        const db = await getDb();
+        const col = db.collection('projects');
+        const q = event.queryStringParameters || {};
+
+        switch (event.httpMethod) {
+            case 'GET': {
+                const docs = await col.find({}, { projection: { _id: 0 } }).toArray();
+                return ok(docs);
+            }
+            case 'POST': {
+                const doc = JSON.parse(event.body);
+                await col.insertOne({ _id: doc.id, ...doc });
+                return ok(doc);
+            }
+            case 'PUT': {
+                const { id, ...fields } = JSON.parse(event.body);
+                await col.updateOne({ id }, { $set: fields });
+                return ok({ ok: true });
+            }
+            case 'DELETE': {
+                const id = q.id;
+                // 級聯刪除群組、圖面、工廠步驟
+                const groupIds = (await db.collection('groups').find({ projectId: id }, { projection: { id: 1 } }).toArray()).map(g => g.id);
+                if (groupIds.length) {
+                    await db.collection('drawings').deleteMany({ groupId: { $in: groupIds } });
+                    await db.collection('factorySteps').deleteMany({ groupId: { $in: groupIds } });
+                    await db.collection('groups').deleteMany({ projectId: id });
+                }
+                await col.deleteOne({ id });
+                return ok({ ok: true });
+            }
+            default: return err(405, 'Method Not Allowed');
+        }
+    } catch (e) {
+        console.error(e);
+        return err(500, e.message);
+    }
+};
