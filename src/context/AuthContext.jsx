@@ -2,10 +2,10 @@ import { createContext, useState, useContext } from 'react';
 
 export const ROLES = {
     admin:      { label: '管理員',   pages: ['dashboard','drawing','site','factory','calendar','settings'] },
-    drawing:    { label: '繪圖員',   pages: ['drawing','calendar'] },
-    purchasing: { label: '採購人員', pages: ['factory','calendar'] },
-    site:       { label: '工地人員', pages: ['site','calendar'] },
-    owner:      { label: '業主',     pages: ['calendar'], readonly: true },
+    drawing:    { label: '繪圖員',   pages: ['dashboard','drawing','calendar'] },
+    purchasing: { label: '採購人員', pages: ['dashboard','factory','calendar'] },
+    site:       { label: '工地人員', pages: ['dashboard','site','calendar'] },
+    owner:      { label: '業主',     pages: ['dashboard','calendar'], readonly: true },
 };
 
 // 開發期暫用假帳號，串接 Supabase 後換掉

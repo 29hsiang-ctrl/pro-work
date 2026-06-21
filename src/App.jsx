@@ -41,7 +41,7 @@ export default function App() {
     const { user, logout } = useAuth();
     const { canAccess } = usePermission();
     const { loading: dbLoading, dbError } = useProject();
-    const [mainSection, setMainSection] = useState('site');
+    const [mainSection, setMainSection] = useState('dashboard');
     const [view, setView] = useState('photo');
     const [menuOpen, setMenuOpen] = useState(false);
     const [calendarJumpDate, setCalendarJumpDate] = useState(null);
