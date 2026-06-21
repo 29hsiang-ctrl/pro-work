@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { useProject, getDrawingStatus, ITEM_TYPES } from '../context/ProjectContext';
+import { useAuth } from '../context/AuthContext';
 
 function useAllItemTypes() {
     try {
@@ -10,9 +11,13 @@ function useAllItemTypes() {
     } catch { return ITEM_TYPES; }
 }
 
-function DateInput({ value, onChange }) {
+const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu }, ref) {
     const [editing, setEditing] = useState(false);
     const inputRef = useRef(null);
+
+    useImperativeHandle(ref, () => ({
+        triggerEdit: () => setEditing(true),
+    }));
 
     useEffect(() => {
         if (editing && inputRef.current) {
@@ -21,7 +26,9 @@ function DateInput({ value, onChange }) {
     }, [editing]);
 
     return (
-        <div className="relative min-h-[1.1rem]" onDoubleClick={() => setEditing(true)}>
+        <div className="relative min-h-[1.1rem]"
+             onDoubleClick={() => setEditing(true)}
+             onContextMenu={onContextMenu}>
             <input
                 ref={inputRef}
                 type="date"
@@ -35,203 +42,555 @@ function DateInput({ value, onChange }) {
             </span>
         </div>
     );
+});
+
+// 批次顏色（deterministic）
+const BATCH_COLORS = [
+    'border-blue-400', 'border-purple-400', 'border-orange-400',
+    'border-pink-400', 'border-teal-400', 'border-yellow-400',
+];
+function batchBorderColor(tag) {
+    if (!tag) return 'border-transparent';
+    let h = 0;
+    for (const c of tag) h = (h * 31 + c.charCodeAt(0)) & 0xff;
+    return BATCH_COLORS[h % BATCH_COLORS.length];
+}
+const BATCH_BG_COLORS = [
+    'bg-blue-50', 'bg-purple-50', 'bg-orange-50',
+    'bg-pink-50', 'bg-teal-50', 'bg-yellow-50',
+];
+function batchBgColor(tag) {
+    if (!tag) return '';
+    let h = 0;
+    for (const c of tag) h = (h * 31 + c.charCodeAt(0)) & 0xff;
+    return BATCH_BG_COLORS[h % BATCH_BG_COLORS.length];
 }
 
-function DrawingRow({ dr, onUpdate, onDelete, isLast, onAddRevision }) {
-    const status = getDrawingStatus(dr);
-    const canAddRevision = isLast && dr.reviewDate && !dr.approveDate;
+// 子項目專用類型
+const SUB_ITEM_TYPES = ['預埋件', '內套筒', '補料'];
 
-    if (!isLast) {
-        return (
-            <div className="border-b border-gray-50 last:border-0">
-                <div className="flex items-center gap-3 px-3 py-2 text-xs text-gray-400 bg-gray-50/60">
-                    <span className="font-bold w-10 flex-shrink-0">{dr.rev}</span>
-                    <span className="text-[10px]">回簽日期</span>
-                    <span className="text-gray-500">{dr.reviewDate || '——'}</span>
-                    <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${status.cls}`}>{status.label}</span>
-                </div>
-            </div>
-        );
-    }
+// grid template 共用
+const GRID = 'grid grid-cols-[1.5rem_2.5rem_6rem_1fr_5rem_3.5rem_6.5rem_6.5rem_6.5rem_6.5rem_4.5rem_2rem]';
 
-    return (
-        <div className="border-b border-gray-50 last:border-0">
-            <div className="grid grid-cols-[3rem_1fr_1fr_1fr_1fr_auto] gap-1 items-center px-3 py-2 text-xs hover:bg-gray-50">
-                <span className="font-bold text-gray-500">{dr.rev}</span>
-                <div>
-                    <p className="text-gray-400 text-[10px]">預計送審</p>
-                    <DateInput value={dr.plannedSubmit} onChange={v => onUpdate(dr.id, { plannedSubmit: v })} />
-                </div>
-                <div>
-                    <p className="text-gray-400 text-[10px]">送審日期</p>
-                    <DateInput value={dr.submitDate} onChange={v => onUpdate(dr.id, { submitDate: v })} />
-                </div>
-                <div>
-                    <p className="text-gray-400 text-[10px]">回簽日期</p>
-                    <DateInput value={dr.reviewDate} onChange={v => onUpdate(dr.id, { reviewDate: v })} />
-                </div>
-                <div>
-                    <p className="text-gray-400 text-[10px]">核准日期</p>
-                    <DateInput value={dr.approveDate} onChange={v => onUpdate(dr.id, { approveDate: v })} />
-                </div>
-                <div className="flex items-center gap-1">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${status.cls}`}>{status.label}</span>
-                    <button onClick={() => onDelete(dr.id)} className="text-gray-200 hover:text-red-400 transition-colors text-xs px-1">✕</button>
-                </div>
-            </div>
-            {dr.reviewDate && !dr.approveDate && (
-                <div className="px-3 pb-1">
-                    <input
-                        type="text"
-                        placeholder="回簽意見..."
-                        value={dr.note || ''}
-                        onChange={e => onUpdate(dr.id, { note: e.target.value })}
-                        className="w-full text-xs text-gray-500 bg-orange-50 border border-orange-100 rounded-lg px-2 py-1 outline-none"
-                    />
-                </div>
-            )}
-            {canAddRevision && (
-                <div className="px-3 pb-2">
-                    <button
-                        onClick={() => onAddRevision(dr.groupId, dr.rev)}
-                        className="text-xs text-blue-500 hover:text-blue-700 font-medium"
-                    >+ 新增版次 ({`R${parseInt(dr.rev.replace('R','')) + 1}`})</button>
-                </div>
-            )}
-        </div>
-    );
-}
+// ── 側邊群組管理面板 ─────────────────────────────────────────────
+function GroupManagementPanel({ open, onClose, batches, activeGroups, drawings, onRemoveFromBatch, onCreateBatch }) {
+    const [expanded, setExpanded] = useState({});
+    const [addingBatch, setAddingBatch] = useState(false);
+    const [newBatchName, setNewBatchName] = useState('');
 
-function GroupCard({ group, drawings, onUpdateDrawing, onDeleteDrawing, onAddRevision, onDeleteGroup, groupingMode, selected, onToggleSelect, onUpdateGroup }) {
-    const [expanded, setExpanded] = useState(true);
-    const [showHistory, setShowHistory] = useState(false);
-    const [editingType, setEditingType] = useState(false);
-    const [typeValue, setTypeValue] = useState(group.type || '');
-    const groupDrawings = drawings.filter(dr => dr.groupId === group.id)
-        .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
-    const latest = groupDrawings[groupDrawings.length - 1];
-    const status = getDrawingStatus(latest);
-    const hasHistory = groupDrawings.length > 1;
-    const visibleDrawings = hasHistory && !showHistory ? [latest] : groupDrawings;
+    const toggle = (tag) => setExpanded(prev => ({ ...prev, [tag]: !prev[tag] }));
+
+    const handleCreate = () => {
+        if (!newBatchName.trim()) return;
+        onCreateBatch(newBatchName.trim());
+        setNewBatchName('');
+        setAddingBatch(false);
+    };
+
+    // 每個 batch 的進度統計
+    const batchStats = (tag) => {
+        const members = activeGroups.filter(g => g.batchTag === tag);
+        const approved = members.filter(g => {
+            const latest = drawings
+                .filter(d => d.groupId === g.id)
+                .sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }))[0];
+            return latest?.approveDate;
+        }).length;
+        return { count: members.length, approved };
+    };
 
     return (
-        <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-colors ${groupingMode && selected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-100'}`}>
-            <div
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
-                onClick={() => groupingMode ? onToggleSelect() : setExpanded(e => !e)}
-            >
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {group.itemNo && <span className="text-xs text-gray-400 font-mono">#{group.itemNo}</span>}
-                            {group.code && <span className="text-xs text-gray-400 font-mono">{group.code}</span>}
-                            <span className="font-semibold text-gray-800">{group.name}</span>
-                            {editingType ? (
-                                <input
-                                    autoFocus
-                                    value={typeValue}
-                                    onChange={e => setTypeValue(e.target.value)}
-                                    onBlur={() => { onUpdateGroup(group.id, { type: typeValue }); setEditingType(false); }}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter') { onUpdateGroup(group.id, { type: typeValue }); setEditingType(false); }
-                                        if (e.key === 'Escape') setEditingType(false);
-                                    }}
-                                    onClick={e => e.stopPropagation()}
-                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full border border-gray-300 outline-none w-24"
-                                />
-                            ) : (
-                                <span
-                                    onClick={e => { e.stopPropagation(); setTypeValue(group.type || ''); setEditingType(true); }}
-                                    title="點擊編輯類型"
-                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
-                                >{group.type || '未分類'}</span>
-                            )}
-                            {group.batchTag && <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-500 rounded-full">批次：{group.batchTag}</span>}
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.cls}`}>{status.label}</span>
-                            {latest && <span className="text-xs text-gray-400">{latest.rev}</span>}
-                        </div>
-                        {group.note && <p className="text-xs text-gray-400 mt-0.5">{group.note}</p>}
-                    </div>
+        <>
+            {/* Overlay */}
+            {open && <div className="fixed inset-0 z-20" onClick={onClose} />}
+
+            {/* Panel */}
+            <div className={`fixed right-0 top-0 h-full w-72 bg-white shadow-2xl z-30 flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
+                    <h3 className="font-semibold text-gray-900">群組管理</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
                 </div>
-                <div className="flex items-center gap-2">
-                    {groupingMode ? (
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
-                            {selected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {batches.length === 0 && (
+                        <p className="text-xs text-gray-400 text-center py-8">尚無群組，請在表格中選取項目後指定群組</p>
+                    )}
+
+                    {batches.map(tag => {
+                        const { count, approved } = batchStats(tag);
+                        const members = activeGroups.filter(g => g.batchTag === tag);
+                        const isExpanded = expanded[tag];
+                        const bc = batchBorderColor(tag);
+
+                        return (
+                            <div key={tag} className={`border-l-4 ${bc} bg-gray-50 rounded-r-xl overflow-hidden`}>
+                                <button
+                                    onClick={() => toggle(tag)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-100 transition-colors text-left"
+                                >
+                                    <div>
+                                        <span className="font-medium text-gray-800 text-sm">{tag}</span>
+                                        <span className="text-xs text-gray-400 ml-2">{count}項</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-xs font-medium ${approved === count ? 'text-green-600' : 'text-gray-500'}`}>
+                                            {approved}/{count} 核准
+                                        </span>
+                                        <span className="text-gray-400 text-[10px]">{isExpanded ? '▼' : '▶'}</span>
+                                    </div>
+                                </button>
+
+                                {isExpanded && (
+                                    <div className="px-3 pb-2 space-y-1">
+                                        {members.map(g => (
+                                            <div key={g.id} className="flex items-center justify-between py-1 text-xs text-gray-600">
+                                                <span className="truncate flex-1" title={g.name}>{g.name}</span>
+                                                <button
+                                                    onClick={() => onRemoveFromBatch(g.id)}
+                                                    className="ml-2 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                                                >✕</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* 新增群組 */}
+                <div className="border-t border-gray-100 p-4">
+                    {addingBatch ? (
+                        <div className="space-y-2">
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="群組名稱（例：A批）"
+                                value={newBatchName}
+                                onChange={e => setNewBatchName(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setAddingBatch(false); }}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50"
+                            />
+                            <div className="flex gap-2">
+                                <button onClick={handleCreate} className="flex-1 py-1.5 bg-gray-900 text-white text-xs rounded-lg">建立</button>
+                                <button onClick={() => setAddingBatch(false)} className="flex-1 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+                            </div>
+                            <p className="text-[10px] text-gray-400">建立後請在表格中選取項目並指定此群組</p>
                         </div>
                     ) : (
-                        <>
-                            <button
-                                onClick={e => { e.stopPropagation(); if (window.confirm(`刪除群組「${group.name}」？`)) onDeleteGroup(group.id); }}
-                                className="text-xs text-gray-300 hover:text-red-400 transition-colors"
-                            >刪除</button>
-                            <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                        </>
+                        <button
+                            onClick={() => setAddingBatch(true)}
+                            className="w-full py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-xl border border-dashed border-gray-200 transition-colors"
+                        >+ 新增群組</button>
                     )}
                 </div>
             </div>
-            {expanded && (
-                <div className="border-t border-gray-50" onDoubleClick={() => hasHistory && setShowHistory(s => !s)}>
-                    {/* 欄位標題 */}
-                    <div className="grid grid-cols-[3rem_1fr_1fr_1fr_1fr_auto] gap-1 px-3 py-1 bg-gray-50 text-[10px] text-gray-400 font-medium">
-                        <span>版次</span>
-                        <span>預計送審</span>
-                        <span>送審日期</span>
-                        <span>回簽日期</span>
-                        <span>核准日期</span>
-                        <span>狀態</span>
+        </>
+    );
+}
+
+// ── GroupRow ─────────────────────────────────────────────────────
+function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdateGroup, isAdmin, selectMode, selected, onToggleSelect, onOpenDetail, onAddSubItem, depth = 0, hasChildren = false, isCollapsed = false, onToggleCollapse }) {
+    const [editingType, setEditingType] = useState(false);
+    const [typeValue, setTypeValue] = useState(group.type || '');
+    const [ctxMenu, setCtxMenu] = useState(null); // { x, y, field }
+    const [nameCtxMenu, setNameCtxMenu] = useState(null); // { x, y }
+    const [soloPending, setSoloPending] = useState(null); // field name pending solo edit
+    const ctxRef = useRef(null);
+    const nameCtxRef = useRef(null);
+
+    const dateRefs = {
+        plannedSubmit: useRef(null),
+        submitDate:    useRef(null),
+        reviewDate:    useRef(null),
+        approveDate:   useRef(null),
+    };
+
+    const sorted = [...allDr].sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
+    const latest = sorted[sorted.length - 1];
+    const status = getDrawingStatus(latest);
+    const borderColor = batchBorderColor(group.batchTag);
+    const bgColor = group.batchTag ? batchBgColor(group.batchTag) : '';
+
+    const handleTypeBlur = () => {
+        onUpdateGroup(group.id, { type: typeValue });
+        setEditingType(false);
+    };
+
+    // 右鍵名稱欄
+    const handleNameRightClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setNameCtxMenu({ x: e.clientX, y: e.clientY });
+    };
+
+    // 右鍵日期欄（只對有 batchTag 的列作用）
+    const handleDateRightClick = (e, field) => {
+        if (!group.batchTag) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setCtxMenu({ x: e.clientX, y: e.clientY, field });
+    };
+
+    const handleSoloEdit = () => {
+        const field = ctxMenu.field;
+        setCtxMenu(null);
+        setSoloPending(field);
+        dateRefs[field].current?.triggerEdit();
+    };
+
+    // 關閉 context menu（點擊外部或 Esc）
+    useEffect(() => {
+        if (!ctxMenu) return;
+        const onDown = (e) => { if (ctxRef.current && !ctxRef.current.contains(e.target)) setCtxMenu(null); };
+        const onKey  = (e) => { if (e.key === 'Escape') setCtxMenu(null); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+    }, [ctxMenu]);
+
+    useEffect(() => {
+        if (!nameCtxMenu) return;
+        const onDown = (e) => { if (nameCtxRef.current && !nameCtxRef.current.contains(e.target)) setNameCtxMenu(null); };
+        const onKey  = (e) => { if (e.key === 'Escape') setNameCtxMenu(null); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+    }, [nameCtxMenu]);
+
+    // 決定 onChange：solo 模式用 onUpdateSolo，否則用 onUpdate
+    const makeOnChange = (field, drId) => (v) => {
+        if (soloPending === field) {
+            setSoloPending(null);
+            onUpdateSolo(drId, { [field]: v });
+        } else {
+            onUpdate(drId, { [field]: v });
+        }
+    };
+
+    return (
+        <>
+            {/* 主列 */}
+            <div
+                className={`${GRID} gap-x-1 items-center px-2 py-2 border-b border-gray-100 text-xs transition-colors border-l-4 ${borderColor} ${bgColor || 'bg-white'} hover:brightness-95 ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selected ? 'ring-1 ring-inset ring-indigo-300' : ''}`}
+                onClick={() => selectMode && onToggleSelect()}
+            >
+                {/* 第一欄：選取模式 = checkbox，否則空白 */}
+                {selectMode ? (
+                    <div
+                        onClick={e => { e.stopPropagation(); onToggleSelect(); }}
+                        className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-colors ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 hover:border-indigo-400'}`}
+                    >
+                        {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
                     </div>
-                    {hasHistory && !showHistory && (
-                        <div className="px-3 py-1 text-[10px] text-gray-300 select-none">
-                            共 {groupDrawings.length} 個版次，雙擊展開歷史紀錄
-                        </div>
-                    )}
-                    {visibleDrawings.map((dr, i) => (
-                        <DrawingRow
-                            key={dr.id}
-                            dr={dr}
-                            onUpdate={onUpdateDrawing}
-                            onDelete={onDeleteDrawing}
-                            isLast={groupDrawings.indexOf(dr) === groupDrawings.length - 1}
-                            onAddRevision={onAddRevision}
-                        />
-                    ))}
-                    {/* 若最新版次已核准，不需新增版次 */}
-                    {(!latest || latest.approveDate) && (
-                        <div className="px-3 py-2">
-                            <button
-                                onClick={() => onAddRevision(group.id, latest?.rev || 'R0')}
-                                className="text-xs text-blue-500 hover:text-blue-700 font-medium"
-                            >+ 新增版次</button>
-                        </div>
-                    )}
+                ) : hasChildren ? (
+                    <button
+                        onClick={e => { e.stopPropagation(); onToggleCollapse(); }}
+                        className="text-gray-400 text-[10px] flex items-center justify-center hover:text-gray-600 cursor-pointer"
+                    >{isCollapsed ? '▶' : '▼'}</button>
+                ) : <span />}
+
+                <span className="text-gray-400 font-mono truncate">{group.itemNo || ''}</span>
+                <span className="text-gray-400 font-mono truncate">{group.code || ''}</span>
+                <span
+                    className="font-medium text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-0.5"
+                    title="雙擊查看詳細資訊，右鍵更多選項"
+                    onDoubleClick={e => { e.stopPropagation(); onOpenDetail(); }}
+                    onContextMenu={handleNameRightClick}
+                >
+                    {depth > 0 && <span className="text-gray-300 flex-shrink-0">└</span>}
+                    <span className="truncate">{group.name}</span>
+                </span>
+
+                {/* 類型 */}
+                {editingType ? (
+                    <input
+                        autoFocus
+                        value={typeValue}
+                        onChange={e => setTypeValue(e.target.value)}
+                        onBlur={handleTypeBlur}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') handleTypeBlur();
+                            if (e.key === 'Escape') setEditingType(false);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="text-xs px-1 py-0.5 bg-gray-100 rounded border border-gray-300 outline-none w-full"
+                    />
+                ) : (
+                    <span
+                        onClick={e => { e.stopPropagation(); if (!selectMode) { setTypeValue(group.type || ''); setEditingType(true); } }}
+                        className="text-xs px-1.5 py-0.5 bg-white/70 text-gray-500 rounded cursor-pointer hover:bg-white truncate"
+                        title="點擊編輯類型"
+                    >{group.type || '未分類'}</span>
+                )}
+
+                <span className="text-gray-500 font-mono text-center">{latest?.rev || '—'}</span>
+
+                {latest ? (() => {
+                    const isApproved = !!latest.approveDate;
+                    const approveOnly = !!group.parentId;
+                    return (
+                        <>
+                            {approveOnly || isApproved
+                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.plannedSubmit || '——')}</span>
+                                : <DateInput ref={dateRefs.plannedSubmit} value={latest.plannedSubmit}
+                                    onChange={makeOnChange('plannedSubmit', latest.id)}
+                                    onContextMenu={(e) => handleDateRightClick(e, 'plannedSubmit')} />
+                            }
+                            {approveOnly || isApproved
+                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.submitDate || '——')}</span>
+                                : <DateInput ref={dateRefs.submitDate} value={latest.submitDate}
+                                    onChange={makeOnChange('submitDate', latest.id)}
+                                    onContextMenu={(e) => handleDateRightClick(e, 'submitDate')} />
+                            }
+                            {approveOnly || isApproved
+                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.reviewDate || '——')}</span>
+                                : <DateInput ref={dateRefs.reviewDate} value={latest.reviewDate}
+                                    onChange={makeOnChange('reviewDate', latest.id)}
+                                    onContextMenu={(e) => handleDateRightClick(e, 'reviewDate')} />
+                            }
+                            <DateInput ref={dateRefs.approveDate} value={latest.approveDate}
+                                onChange={makeOnChange('approveDate', latest.id)}
+                                onContextMenu={(e) => handleDateRightClick(e, 'approveDate')} />
+                        </>
+                    );
+                })() : (
+                    <><span/><span/><span/><span/></>
+                )}
+
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap text-center ${status.cls}`}>{status.label}</span>
+
+                {isAdmin ? (
+                    <button
+                        onClick={e => { e.stopPropagation(); if (window.confirm(`刪除「${group.name}」？`)) onDeleteGroup(group.id); }}
+                        className="text-gray-200 hover:text-red-400 transition-colors text-center"
+                    >✕</button>
+                ) : <span />}
+            </div>
+
+            {/* 右鍵選單：單獨修改日期 */}
+            {ctxMenu && (
+                <div
+                    ref={ctxRef}
+                    style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y }}
+                    className="z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[9rem]"
+                >
+                    <button
+                        onClick={handleSoloEdit}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >單獨修改此日期</button>
                 </div>
+            )}
+
+            {/* 右鍵選單：名稱欄 */}
+            {nameCtxMenu && (
+                <div
+                    ref={nameCtxRef}
+                    style={{ position: 'fixed', left: nameCtxMenu.x, top: nameCtxMenu.y }}
+                    className="z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[9rem]"
+                >
+                    <button
+                        onClick={() => { setNameCtxMenu(null); onOpenDetail(); }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >詳細內容</button>
+                    <button
+                        onClick={() => { setNameCtxMenu(null); onAddSubItem(); }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >新增子項目</button>
+                </div>
+            )}
+
+        </>
+    );
+}
+
+// ── 指定群組下拉選單 ──────────────────────────────────────────────
+function BatchDropdown({ batches, onSelect, onClose }) {
+    const [newName, setNewName] = useState('');
+    const [creating, setCreating] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        window.addEventListener('mousedown', handler);
+        return () => window.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    return (
+        <div ref={ref} className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-10 py-1 overflow-hidden">
+            {batches.map(tag => (
+                <button key={tag} onClick={() => { onSelect(tag); onClose(); }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >{tag}</button>
+            ))}
+            {batches.length > 0 && <div className="border-t border-gray-100 my-1" />}
+            {creating ? (
+                <div className="px-3 py-2 space-y-1.5">
+                    <input
+                        autoFocus
+                        type="text"
+                        placeholder="群組名稱"
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && newName.trim()) { onSelect(newName.trim()); onClose(); }
+                            if (e.key === 'Escape') setCreating(false);
+                        }}
+                        className="w-full text-sm px-2 py-1 border border-gray-200 rounded-lg outline-none focus:border-gray-400"
+                    />
+                    <div className="flex gap-1">
+                        <button onClick={() => newName.trim() && (onSelect(newName.trim()), onClose())}
+                            className="flex-1 text-xs py-1 bg-gray-900 text-white rounded-lg">確定</button>
+                        <button onClick={() => setCreating(false)}
+                            className="flex-1 text-xs py-1 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+                    </div>
+                </div>
+            ) : (
+                <button onClick={() => setCreating(true)}
+                    className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+                >+ 新增群組</button>
             )}
         </div>
     );
 }
 
+// ── DetailModal ───────────────────────────────────────────────────
+function DetailModal({ group, drawings, onClose, onUpdate }) {
+    const sorted = [...drawings].sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }));
+    const latest = sorted[0];
+    const [note, setNote] = useState(latest?.note || '');
+
+    const handleBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+    const meta = [
+        group.itemNo && `#${group.itemNo}`,
+        group.code,
+        group.type,
+        group.batchTag && `批次：${group.batchTag}`,
+    ].filter(Boolean).join('  ·  ');
+
+    return (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+             onClick={handleBackdrop}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-start justify-between p-5 border-b border-gray-100">
+                    <div>
+                        <h3 className="font-bold text-gray-900 text-base">{group.name}</h3>
+                        {meta && <p className="text-xs text-gray-400 mt-0.5">{meta}</p>}
+                    </div>
+                    <button onClick={onClose} className="text-gray-300 hover:text-gray-600 text-xl leading-none ml-4">✕</button>
+                </div>
+
+                {/* 版次表格 */}
+                <div className="overflow-auto flex-1 px-5 py-4">
+                    {sorted.length === 0 ? (
+                        <p className="text-xs text-gray-300 text-center py-8">尚無版次資料</p>
+                    ) : (
+                        <table className="w-full text-xs text-left border-collapse">
+                            <thead>
+                                <tr className="text-gray-400 border-b border-gray-100">
+                                    <th className="pb-2 font-medium pr-4">版次</th>
+                                    <th className="pb-2 font-medium pr-4">預計送審</th>
+                                    <th className="pb-2 font-medium pr-4">送審日期</th>
+                                    <th className="pb-2 font-medium pr-4">回簽日期</th>
+                                    <th className="pb-2 font-medium pr-4">核准日期</th>
+                                    <th className="pb-2 font-medium">狀態</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sorted.map((dr, i) => {
+                                    const s = getDrawingStatus(dr);
+                                    return (
+                                        <tr key={dr.id} className={`border-b border-gray-50 ${i === 0 ? 'bg-blue-50/60' : ''}`}>
+                                            <td className="py-2 pr-4 font-mono text-gray-600">{dr.rev}</td>
+                                            <td className="py-2 pr-4 text-gray-500">{dr.plannedSubmit || '—'}</td>
+                                            <td className="py-2 pr-4 text-gray-500">{dr.submitDate || '—'}</td>
+                                            <td className="py-2 pr-4 text-gray-500">{dr.reviewDate || '—'}</td>
+                                            <td className="py-2 pr-4 text-gray-500">{dr.approveDate || '—'}</td>
+                                            <td className="py-2">
+                                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${s.cls}`}>{s.label}</span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* 備註 */}
+                {latest && (
+                    <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+                        <label className="text-xs text-gray-400 block mb-1.5">備註（{latest.rev}）</label>
+                        <textarea
+                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-gray-400 bg-gray-50 resize-none"
+                            rows={3}
+                            placeholder="輸入備註..."
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            onBlur={() => onUpdate(latest.id, { note })}
+                        />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── DrawingPage ───────────────────────────────────────────────────
 export function DrawingPage() {
     const { projects, groups, drawings, addGroup, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing } = useProject();
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
     const allTypes = useAllItemTypes();
+
     const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id ?? null);
     const [addingGroup, setAddingGroup] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupType, setNewGroupType] = useState(allTypes[0]);
 
-    // 群組模式
-    const [groupingMode, setGroupingMode] = useState(false);
-    const [groupTag, setGroupTag] = useState('');
+    // 選取模式
+    const [selectMode, setSelectMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const [showBatchMenu, setShowBatchMenu] = useState(false);
+    const [pendingBatchName, setPendingBatchName] = useState('');
+
+    // 群組管理面板
+    const [showPanel, setShowPanel] = useState(false);
+
+    // 還原堆疊
+    const [undoStack, setUndoStack] = useState([]);
+
+    // 詳細資訊 Modal
+    const [detailGroupId, setDetailGroupId] = useState(null);
+
+    // 子項目折疊
+    const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+    const toggleCollapse = (id) => setCollapsedGroups(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    // 子項目新增
+    const [addingSubItem, setAddingSubItem] = useState(null); // parentGroupId | null
+    const [newSubName, setNewSubName] = useState('');
+    const [newSubType, setNewSubType] = useState(SUB_ITEM_TYPES[0]);
 
     const activeGroups = groups.filter(g => g.projectId === activeProjectId);
+    const batches = [...new Set(activeGroups.map(g => g.batchTag).filter(Boolean))];
 
-    const handleAddGroup = () => {
-        if (!newGroupName.trim() || !activeProjectId) return;
-        addGroup(activeProjectId, newGroupName.trim(), newGroupType);
-        setNewGroupName('');
-        setNewGroupType(allTypes[0]);
-        setAddingGroup(false);
-    };
+    // 父子排序：頂層項目 → 各自的子項目
+    const topLevelGroups = activeGroups.filter(g => !g.parentId);
+    const childGroups = activeGroups.filter(g => !!g.parentId);
+    const orderedGroups = [];
+    for (const parent of topLevelGroups) {
+        orderedGroups.push({ g: parent, depth: 0 });
+        for (const child of childGroups.filter(c => c.parentId === parent.id)) {
+            orderedGroups.push({ g: child, depth: 1 });
+        }
+    }
 
     const toggleSelect = (id) => {
         setSelectedIds(prev => {
@@ -241,27 +600,147 @@ export function DrawingPage() {
         });
     };
 
-    const handleConfirmGroup = async () => {
-        if (!groupTag.trim() || selectedIds.size === 0) return;
-        for (const id of selectedIds) {
-            await updateGroup(id, { batchTag: groupTag.trim() });
-        }
-        setGroupingMode(false);
-        setGroupTag('');
+    const handleAssignBatch = async (tag) => {
+        for (const id of selectedIds) await updateGroup(id, { batchTag: tag });
         setSelectedIds(new Set());
+        setSelectMode(false);
+        setShowBatchMenu(false);
+        setPendingBatchName('');
     };
 
-    const handleCancelGroup = () => {
-        setGroupingMode(false);
-        setGroupTag('');
+    const handleRemoveFromBatch = async (groupId) => {
+        await updateGroup(groupId, { batchTag: '' });
+    };
+
+    const handleRemoveSelectedFromBatch = async () => {
+        for (const id of selectedIds) await updateGroup(id, { batchTag: '' });
         setSelectedIds(new Set());
+        setSelectMode(false);
+    };
+
+    const exitSelectMode = () => {
+        setSelectMode(false);
+        setSelectedIds(new Set());
+        setShowBatchMenu(false);
+        setPendingBatchName('');
+    };
+
+    const handleAddGroup = () => {
+        if (!newGroupName.trim() || !activeProjectId) return;
+        addGroup(activeProjectId, newGroupName.trim(), newGroupType);
+        setNewGroupName('');
+        setNewGroupType(allTypes[0]);
+        setAddingGroup(false);
+    };
+
+    const handleAddSubItem = (parentGroupId) => {
+        setAddingSubItem(parentGroupId);
+        setNewSubName('');
+        setNewSubType(SUB_ITEM_TYPES[0]);
+    };
+
+    const handleConfirmSubItem = () => {
+        if (!newSubName.trim()) return;
+        addGroup(activeProjectId, `${newSubName.trim()}-${newSubType}`, newSubType, { parentId: addingSubItem });
+        setAddingSubItem(null);
+        setNewSubName('');
+    };
+
+    // 更新日期：自動進版 + 同批次日期同步
+    const handleUpdateDrawing = async (drId, fields) => {
+        if (fields.submitDate) fields = { ...fields, plannedSubmit: '' };
+
+        const dr = drawings.find(d => d.id === drId);
+        if (!dr) return;
+        const group = groups.find(g => g.id === dr.groupId);
+
+        // 記錄還原快照
+        const undoUpdates = [];
+        const prevFields = {};
+        for (const key of Object.keys(fields)) prevFields[key] = dr[key] ?? '';
+        undoUpdates.push({ drId, prevFields });
+
+        updateDrawing(drId, fields);
+        const newRevIds = [];
+
+        // 自動進版
+        if (fields.reviewDate && !dr.approveDate) {
+            const grpDrawings = drawings.filter(d => d.groupId === dr.groupId);
+            const latest = grpDrawings.sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }))[0];
+            if (latest?.id === drId) {
+                const newId = await addDrawingRevision(dr.groupId, dr.rev);
+                if (newId) newRevIds.push(newId);
+            }
+        }
+
+        // 同批次日期同步
+        if (group?.batchTag) {
+            const siblings = groups.filter(g =>
+                g.batchTag === group.batchTag &&
+                g.projectId === group.projectId &&
+                g.id !== group.id
+            );
+            for (const sg of siblings) {
+                const sgLatest = drawings
+                    .filter(d => d.groupId === sg.id)
+                    .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }))
+                    .at(-1);
+                if (sgLatest && !sgLatest.approveDate) {
+                    const sgPrev = {};
+                    for (const key of Object.keys(fields)) sgPrev[key] = sgLatest[key] ?? '';
+                    undoUpdates.push({ drId: sgLatest.id, prevFields: sgPrev });
+                    updateDrawing(sgLatest.id, fields);
+                    if (fields.reviewDate) {
+                        const newId = await addDrawingRevision(sg.id, sgLatest.rev);
+                        if (newId) newRevIds.push(newId);
+                    }
+                }
+            }
+        }
+
+        setUndoStack(prev => [...prev.slice(-9), { updates: undoUpdates, newRevIds }]);
+    };
+
+    // 單獨修改：跳過批次同步，但保留自動進版
+    const handleUpdateDrawingSolo = async (drId, fields) => {
+        if (fields.submitDate) fields = { ...fields, plannedSubmit: '' };
+
+        const dr = drawings.find(d => d.id === drId);
+        const prevFields = {};
+        for (const key of Object.keys(fields)) prevFields[key] = dr ? (dr[key] ?? '') : '';
+
+        updateDrawing(drId, fields);
+        const newRevIds = [];
+
+        if (fields.reviewDate && dr && !dr.approveDate) {
+            const grpDrawings = drawings.filter(d => d.groupId === dr.groupId);
+            const latest = grpDrawings.sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }))[0];
+            if (latest?.id === drId) {
+                const newId = await addDrawingRevision(dr.groupId, dr.rev);
+                if (newId) newRevIds.push(newId);
+            }
+        }
+
+        setUndoStack(prev => [...prev.slice(-9), { updates: [{ drId, prevFields }], newRevIds }]);
+    };
+
+    const handleUndo = () => {
+        if (undoStack.length === 0) return;
+        const entry = undoStack[undoStack.length - 1];
+        setUndoStack(prev => prev.slice(0, -1));
+        for (const { drId, prevFields } of entry.updates) {
+            updateDrawing(drId, prevFields);
+        }
+        for (const revId of entry.newRevIds) {
+            deleteDrawing(revId);
+        }
     };
 
     const handleExport = () => {
         const project = projects.find(p => p.id === activeProjectId);
-        const projGroups = groups.filter(g => g.projectId === activeProjectId)
+        const projGroups = groups
+            .filter(g => g.projectId === activeProjectId)
             .sort((a, b) => Number(a.itemNo || 999) - Number(b.itemNo || 999));
-
         const rows = [];
         for (const g of projGroups) {
             const gDrawings = drawings
@@ -269,52 +748,19 @@ export function DrawingPage() {
                 .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
             for (const d of gDrawings) {
                 rows.push({
-                    '項次':     g.itemNo || '',
-                    '工料編號': g.code || '',
-                    '項目名稱': g.name,
-                    '品項類型': g.type || '',
-                    '批次':     g.batchTag || '',
-                    '版次':     d.rev,
-                    '預計送審': d.plannedSubmit || '',
-                    '送審日期': d.submitDate || '',
-                    '回簽日期': d.reviewDate || '',
-                    '核准日期': d.approveDate || '',
-                    '狀態':     getDrawingStatus(d).label,
-                    '備註':     d.note || '',
+                    '項次': g.itemNo || '', '工料編號': g.code || '', '項目名稱': g.name,
+                    '品項類型': g.type || '', '批次': g.batchTag || '', '版次': d.rev,
+                    '預計送審': d.plannedSubmit || '', '送審日期': d.submitDate || '',
+                    '回簽日期': d.reviewDate || '', '核准日期': d.approveDate || '',
+                    '狀態': getDrawingStatus(d).label,
                 });
             }
         }
-
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 36 }, { wch: 12 }, { wch: 10 },
-            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 20 },
-        ];
+        ws['!cols'] = [6, 12, 36, 12, 10, 6, 12, 12, 12, 12, 8].map(wch => ({ wch }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '繪圖管理');
-        const fileName = `繪圖管理_${project?.name || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-    };
-
-    // 更新日期時同步同批次所有項目的最新版次
-    const handleUpdateDrawing = (drId, fields) => {
-        updateDrawing(drId, fields);
-        const dr = drawings.find(d => d.id === drId);
-        if (!dr) return;
-        const group = groups.find(g => g.id === dr.groupId);
-        if (!group?.batchTag) return;
-        const siblings = groups.filter(g =>
-            g.batchTag === group.batchTag &&
-            g.projectId === group.projectId &&
-            g.id !== group.id
-        );
-        for (const sg of siblings) {
-            const sgLatest = drawings
-                .filter(d => d.groupId === sg.id)
-                .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }))
-                .at(-1);
-            if (sgLatest) updateDrawing(sgLatest.id, fields);
-        }
+        XLSX.utils.book_append_sheet(wb, ws, '繪圖');
+        XLSX.writeFile(wb, `繪圖_${project?.name || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
     if (projects.length === 0) {
@@ -328,84 +774,97 @@ export function DrawingPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
-            {/* Project tabs */}
+            {/* 工地 tabs */}
             <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-2 overflow-x-auto">
                 {projects.map(p => (
-                    <button
-                        key={p.id}
-                        onClick={() => { setActiveProjectId(p.id); setAddingGroup(false); }}
+                    <button key={p.id}
+                        onClick={() => { setActiveProjectId(p.id); setAddingGroup(false); exitSelectMode(); }}
                         className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-colors ${activeProjectId === p.id ? 'bg-gray-900 text-white font-medium' : 'text-gray-500 hover:bg-gray-100'}`}
                     >{p.name}</button>
                 ))}
             </div>
 
-            <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-4">
-                {/* 頁面標題列 */}
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-gray-900">繪圖管理</h2>
+            <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
+                {/* 標題列 */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h2 className="text-lg font-bold text-gray-900">繪圖</h2>
                     {activeProjectId && (
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleExport}
-                                className="px-4 py-2 text-sm rounded-xl font-medium transition-colors border bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                            >匯出 Excel</button>
-                            <button
-                                onClick={() => { setGroupingMode(g => !g); setAddingGroup(false); }}
-                                className={`px-4 py-2 text-sm rounded-xl font-medium transition-colors border ${groupingMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
-                            >群組</button>
-                            <button
-                                onClick={() => { setAddingGroup(true); setGroupingMode(false); }}
-                                className="px-4 py-2 bg-gray-900 text-white text-sm rounded-xl font-medium hover:bg-gray-700 transition-colors"
-                            >+ 新增項目</button>
+                        <div className="flex gap-2 flex-wrap">
+                            {/* 選取模式下的操作列 */}
+                            {selectMode ? (
+                                <>
+                                    {pendingBatchName ? (
+                                        // 從面板新增群組後，直接顯示確認按鈕
+                                        <button
+                                            onClick={() => handleAssignBatch(pendingBatchName)}
+                                            disabled={selectedIds.size === 0}
+                                            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-40"
+                                        >確認指定到「{pendingBatchName}」</button>
+                                    ) : (
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setShowBatchMenu(v => !v)}
+                                                disabled={selectedIds.size === 0}
+                                                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-40 flex items-center gap-1"
+                                            >指定群組 <span className="text-xs">▾</span></button>
+                                            {showBatchMenu && (
+                                                <BatchDropdown
+                                                    batches={batches}
+                                                    onSelect={handleAssignBatch}
+                                                    onClose={() => setShowBatchMenu(false)}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={handleRemoveSelectedFromBatch}
+                                        disabled={selectedIds.size === 0}
+                                        className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                                    >移除群組</button>
+                                    <span className="px-3 py-2 text-sm text-gray-500">已選 {selectedIds.size} 項</span>
+                                    <button onClick={exitSelectMode} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={handleUndo}
+                                        disabled={undoStack.length === 0}
+                                        title="還原上一步"
+                                        className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-30"
+                                    >↩ 還原</button>
+                                    <button onClick={handleExport} className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50">匯出 Excel</button>
+                                    <button
+                                        onClick={() => { setSelectMode(true); setShowPanel(false); }}
+                                        className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                                    >選取</button>
+                                    <button
+                                        onClick={() => { setShowPanel(v => !v); setSelectMode(false); }}
+                                        className={`px-4 py-2 text-sm rounded-xl font-medium border transition-colors ${showPanel ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                                    >群組管理{batches.length > 0 ? ` (${batches.length})` : ''}</button>
+                                    <button
+                                        onClick={() => setAddingGroup(true)}
+                                        className="px-4 py-2 bg-gray-900 text-white text-sm rounded-xl font-medium hover:bg-gray-700"
+                                    >+ 新增項目</button>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
-
-                {/* 群組模式工具列 */}
-                {groupingMode && (
-                    <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 space-y-3">
-                        <p className="text-sm font-semibold text-indigo-800">選取項目並指定群組名稱，同群組項目的日期欄位將自動同步</p>
-                        <div className="flex gap-2 items-center">
-                            <input
-                                autoFocus
-                                type="text"
-                                placeholder="群組名稱（例：A批、第一送審）"
-                                value={groupTag}
-                                onChange={e => setGroupTag(e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm border border-indigo-200 rounded-lg outline-none focus:border-indigo-400 bg-white"
-                            />
-                            <button
-                                onClick={handleConfirmGroup}
-                                disabled={!groupTag.trim() || selectedIds.size === 0}
-                                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg disabled:opacity-40"
-                            >確認（已選 {selectedIds.size}）</button>
-                            <button onClick={handleCancelGroup} className="px-4 py-2 text-sm text-gray-500 hover:bg-white rounded-lg">取消</button>
-                        </div>
-                    </div>
-                )}
 
                 {/* 新增項目表單 */}
                 {addingGroup && (
                     <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-3">
                         <p className="text-sm font-semibold text-gray-700">新增項目</p>
-                        <input
-                            autoFocus
-                            type="text"
-                            placeholder="群組名稱（例：外牆包板）"
-                            value={newGroupName}
-                            onChange={e => setNewGroupName(e.target.value)}
+                        <input autoFocus type="text" placeholder="項目名稱"
+                            value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleAddGroup()}
                             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50"
                         />
                         <div>
                             <label className="text-xs text-gray-400 mb-1 block">品項類型</label>
-                            <select
-                                value={newGroupType}
-                                onChange={e => setNewGroupType(e.target.value)}
+                            <select value={newGroupType} onChange={e => setNewGroupType(e.target.value)}
                                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50"
-                            >
-                                {allTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            >{allTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={handleAddGroup} className="px-4 py-1.5 bg-gray-900 text-white text-sm rounded-lg">新增</button>
@@ -414,30 +873,112 @@ export function DrawingPage() {
                     </div>
                 )}
 
-                {/* 群組列表 */}
+                {/* 表格 */}
                 {activeGroups.length === 0 && !addingGroup ? (
                     <div className="text-center py-16 text-gray-300">
                         <p className="text-4xl mb-2">📋</p>
-                        <p className="text-gray-400 text-sm">此工地尚無群組，點「+ 新增項目」開始</p>
+                        <p className="text-gray-400 text-sm">此工地尚無項目，點「+ 新增項目」開始</p>
                     </div>
                 ) : (
-                    activeGroups.map(g => (
-                        <GroupCard
-                            key={g.id}
-                            group={g}
-                            drawings={drawings}
-                            onUpdateDrawing={handleUpdateDrawing}
-                            onDeleteDrawing={deleteDrawing}
-                            onAddRevision={addDrawingRevision}
-                            onDeleteGroup={deleteGroup}
-                            onUpdateGroup={updateGroup}
-                            groupingMode={groupingMode}
-                            selected={selectedIds.has(g.id)}
-                            onToggleSelect={() => toggleSelect(g.id)}
-                        />
-                    ))
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+                        {/* 表頭 */}
+                        <div className={`${GRID} gap-x-1 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 font-medium sticky top-0 border-l-4 border-transparent`}>
+                            <span />
+                            <span>#</span>
+                            <span>工料編號</span>
+                            <span>項目名稱</span>
+                            <span>類型</span>
+                            <span className="text-center">版次</span>
+                            <span>預計送審</span>
+                            <span>送審日期</span>
+                            <span>回簽日期</span>
+                            <span>核准日期</span>
+                            <span className="text-center">狀態</span>
+                            <span />
+                        </div>
+
+                        {/* 資料列 */}
+                        {orderedGroups.map(({ g, depth }) => {
+                            if (depth > 0 && collapsedGroups.has(g.parentId)) return null;
+                            const hasChildren = depth === 0 && childGroups.some(c => c.parentId === g.id);
+                            return (
+                            <Fragment key={g.id}>
+                                <GroupRow
+                                    group={g}
+                                    depth={depth}
+                                    hasChildren={hasChildren}
+                                    isCollapsed={collapsedGroups.has(g.id)}
+                                    onToggleCollapse={() => toggleCollapse(g.id)}
+                                    allDr={drawings.filter(d => d.groupId === g.id)}
+                                    onUpdate={handleUpdateDrawing}
+                                    onUpdateSolo={handleUpdateDrawingSolo}
+                                    onDeleteGroup={deleteGroup}
+                                    onUpdateGroup={updateGroup}
+                                    isAdmin={isAdmin}
+                                    selectMode={selectMode}
+                                    selected={selectedIds.has(g.id)}
+                                    onToggleSelect={() => toggleSelect(g.id)}
+                                    onOpenDetail={() => setDetailGroupId(g.id)}
+                                    onAddSubItem={() => handleAddSubItem(g.id)}
+                                />
+                                {addingSubItem === g.id && (
+                                    <div className={`${GRID} gap-x-1 items-center px-2 py-1.5 bg-blue-50 border-b border-blue-100 border-l-4 border-l-blue-300`}>
+                                        <span /><span /><span />
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            placeholder="子項目名稱"
+                                            value={newSubName}
+                                            onChange={e => setNewSubName(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleConfirmSubItem(); if (e.key === 'Escape') setAddingSubItem(null); }}
+                                            className="text-xs px-2 py-1 border border-blue-300 rounded outline-none bg-white w-full"
+                                        />
+                                        <select value={newSubType} onChange={e => setNewSubType(e.target.value)}
+                                            className="text-xs px-1 py-1 border border-gray-200 rounded outline-none bg-white w-full">
+                                            {SUB_ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                        <span /><span /><span /><span /><span />
+                                        <div className="flex gap-1">
+                                            <button onClick={handleConfirmSubItem} className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded">新增</button>
+                                            <button onClick={() => setAddingSubItem(null)} className="text-xs px-2 py-0.5 text-gray-500 hover:bg-gray-100 rounded">取消</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </Fragment>
+                            );
+                        })}
+                    </div>
                 )}
             </div>
+
+            {/* 詳細資訊 Modal */}
+            {detailGroupId && (() => {
+                const dg = groups.find(g => g.id === detailGroupId);
+                if (!dg) return null;
+                return (
+                    <DetailModal
+                        group={dg}
+                        drawings={drawings.filter(d => d.groupId === detailGroupId)}
+                        onClose={() => setDetailGroupId(null)}
+                        onUpdate={updateDrawing}
+                    />
+                );
+            })()}
+
+            {/* 側邊群組管理面板 */}
+            <GroupManagementPanel
+                open={showPanel}
+                onClose={() => setShowPanel(false)}
+                batches={batches}
+                activeGroups={activeGroups}
+                drawings={drawings}
+                onRemoveFromBatch={handleRemoveFromBatch}
+                onCreateBatch={(name) => {
+                    setShowPanel(false);
+                    setSelectMode(true);
+                    setPendingBatchName(name);
+                }}
+            />
         </div>
     );
 }

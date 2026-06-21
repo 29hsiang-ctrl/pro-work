@@ -125,6 +125,7 @@ export function ProjectProvider({ children }) {
         };
         setDrawings(prev => [...prev, dr]);
         await api.post('/drawings', dr);
+        return dr.id;
     };
 
     const updateDrawing = async (id, fields) => {

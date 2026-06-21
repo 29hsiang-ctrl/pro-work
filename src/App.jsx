@@ -20,9 +20,9 @@ import { SettingsPage } from './pages/SettingsPage';
 
 const MAIN_NAV = [
     { key: 'dashboard', label: '首頁' },
-    { key: 'drawing',   label: '繪圖管理' },
+    { key: 'drawing',   label: '繪圖' },
+    { key: 'factory',   label: '下料' },
     { key: 'site',      label: '工地現場' },
-    { key: 'factory',   label: '工廠管理' },
     { key: 'calendar',  label: '日曆' },
     { key: 'settings',  label: '系統設定' },
 ];
