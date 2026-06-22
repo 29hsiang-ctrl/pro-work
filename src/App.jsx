@@ -12,6 +12,7 @@ import { getROCDate, compressImage } from './utils/helpers';
 import { useAuth } from './context/AuthContext';
 import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { useProject } from './context/ProjectContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { DrawingPage } from './pages/DrawingPage';
@@ -247,6 +248,7 @@ export default function App() {
     if (chunkedEntries.length === 0) chunkedEntries.push([]);
 
     if (!user) return <LoginPage />;
+    if (user.mustChangePassword) return <ChangePasswordPage />;
     if (dbLoading) return <div className="flex items-center justify-center min-h-screen text-gray-400 font-sans text-sm">連線中...</div>;
     if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen text-red-400 font-sans gap-2"><p className="font-bold">資料庫連線失敗</p><p className="text-xs text-gray-400">{dbError}</p></div>;
 

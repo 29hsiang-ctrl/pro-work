@@ -8,41 +8,58 @@ export const ROLES = {
     owner:      { label: '業主',     pages: ['dashboard','calendar'], readonly: true },
 };
 
-// 開發期暫用假帳號，串接 Supabase 後換掉
-const MOCK_USERS = [
-    { id: 1, name: '管理員',   email: 'admin@prowork.com',    password: '123456', role: 'admin' },
-    { id: 2, name: '繪圖員A',  email: 'drawing@prowork.com',  password: '123456', role: 'drawing' },
-    { id: 3, name: '採購員A',  email: 'purchase@prowork.com', password: '123456', role: 'purchasing' },
-    { id: 4, name: '工地員A',  email: 'site@prowork.com',     password: '123456', role: 'site' },
-    { id: 5, name: '業主A',    email: 'owner@prowork.com',    password: '123456', role: 'owner' },
-];
+const AUTH_KEY = 'auth_user';
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(() => {
         try {
-            const saved = localStorage.getItem('auth_user');
+            const saved = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY);
             return saved ? JSON.parse(saved) : null;
         } catch { return null; }
     });
 
-    const login = (email, password) => {
-        const found = MOCK_USERS.find(u => u.email === email && u.password === password);
-        if (!found) return false;
-        const { password: _omit, ...safeUser } = found;
-        setUser(safeUser);
-        localStorage.setItem('auth_user', JSON.stringify(safeUser));
-        return true;
+    const login = async (account, password, remember = true) => {
+        try {
+            const res = await fetch('/api/auth?action=login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account, password }),
+            });
+            const data = await res.json();
+            if (!res.ok) return { ok: false, error: data.error || '帳號或密碼錯誤' };
+            setUser(data);
+            if (remember) {
+                localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+                sessionStorage.removeItem(AUTH_KEY);
+            } else {
+                sessionStorage.setItem(AUTH_KEY, JSON.stringify(data));
+                localStorage.removeItem(AUTH_KEY);
+            }
+            return { ok: true };
+        } catch {
+            return { ok: false, error: '伺服器連線失敗，請稍後再試' };
+        }
     };
 
     const logout = () => {
         setUser(null);
-        localStorage.removeItem('auth_user');
+        localStorage.removeItem(AUTH_KEY);
+        sessionStorage.removeItem(AUTH_KEY);
+    };
+
+    const updateUser = (fields) => {
+        setUser(prev => {
+            const updated = { ...prev, ...fields };
+            if (localStorage.getItem(AUTH_KEY)) localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+            if (sessionStorage.getItem(AUTH_KEY)) sessionStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+            return updated;
+        });
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, ROLES }}>
+        <AuthContext.Provider value={{ user, login, logout, updateUser, ROLES }}>
             {children}
         </AuthContext.Provider>
     );

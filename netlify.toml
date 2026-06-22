@@ -37,6 +37,16 @@
   to = "/.netlify/functions/settings"
   status = 200
 
+[[redirects]]
+  from = "/api/auth"
+  to = "/.netlify/functions/auth"
+  status = 200
+
+[[redirects]]
+  from = "/api/users"
+  to = "/.netlify/functions/users"
+  status = 200
+
 # SPA fallback（必須放最後）
 [[redirects]]
   from = "/*"

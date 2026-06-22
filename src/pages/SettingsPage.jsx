@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useProject, ITEM_TYPES, FACTORY_STEPS_BY_TYPE } from '../context/ProjectContext';
 import { useSettings } from '../context/SettingsContext';
@@ -95,10 +95,8 @@ async function parseContractFile(file) {
     return parseRows(matrix);
 }
 
-function ProjectTab() {
+function ProjectTab({ allUsers = [] }) {
     const { projects, addProject, updateProject, deleteProject, addGroup } = useProject();
-    const { settings } = useSettings();
-    const allUsers = settings.users || [];
     const fileInputRef = useRef(null);
     const [importingProjectId, setImportingProjectId] = useState(null);
     const [importing, setImporting] = useState(false);
@@ -426,67 +424,117 @@ function VendorsTab({ settings, setSettings }) {
 // ════════════════════════════════════════════════════
 // Tab 5：人員帳號
 // ════════════════════════════════════════════════════
-function UsersTab({ settings, setSettings }) {
+function UsersTab({ onUsersChange }) {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [adding, setAdding] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '123456', role: 'site' });
+    const [form, setForm] = useState({ name: '', account: '', role: 'site' });
     const [editId, setEditId] = useState(null);
     const [editForm, setEditForm] = useState({});
+    const [successMsg, setSuccessMsg] = useState('');
+    const [apiError, setApiError] = useState('');
 
-    const users = settings.users || [];
+    const fetchUsers = async () => {
+        try {
+            const res = await fetch('/api/users');
+            if (res.ok) {
+                const data = await res.json();
+                setUsers(data);
+                onUsersChange?.(data);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    const handleAdd = () => {
-        if (!form.name.trim() || !form.email.trim()) return;
-        setSettings(s => ({ ...s, users: [...(s.users || []), { id: uid(), ...form, active: true }] }));
-        setForm({ name: '', email: '', password: '123456', role: 'site' });
+    useEffect(() => { fetchUsers(); }, []);
+
+    const handleAdd = async () => {
+        if (!form.name.trim() || !form.account.trim()) return;
+        setApiError('');
+        const res = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(form),
+        });
+        const data = await res.json();
+        if (!res.ok) { setApiError(data.error || '新增失敗'); return; }
+        setSuccessMsg(`「${form.name}」帳號已建立，初始密碼為 123456`);
+        setForm({ name: '', account: '', role: 'site' });
         setAdding(false);
+        fetchUsers();
     };
-    const handleSave = (id) => {
-        setSettings(s => ({ ...s, users: s.users.map(u => u.id === id ? { ...u, ...editForm } : u) }));
+
+    const handleSave = async (id) => {
+        setApiError('');
+        const res = await fetch('/api/users', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...editForm }),
+        });
+        if (!res.ok) { const d = await res.json(); setApiError(d.error || '更新失敗'); return; }
         setEditId(null);
+        fetchUsers();
     };
-    const handleDelete = (id) => {
+
+    const handleDelete = async (id) => {
         if (!window.confirm('確認刪除此帳號？')) return;
-        setSettings(s => ({ ...s, users: s.users.filter(u => u.id !== id) }));
+        setApiError('');
+        await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
+        fetchUsers();
     };
-    const toggleActive = (id) => {
-        setSettings(s => ({ ...s, users: s.users.map(u => u.id === id ? { ...u, active: !u.active } : u) }));
+
+    const handleResetPassword = async (id, name) => {
+        if (!window.confirm(`確認重置「${name}」的密碼？`)) return;
+        setApiError('');
+        const res = await fetch('/api/users?action=resetPassword', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setApiError(data.error || '重置失敗'); return; }
+        setSuccessMsg(`「${name}」密碼已重置為 123456`);
+        fetchUsers();
     };
+
+    if (loading) return <div className="text-sm text-gray-400 py-8 text-center">載入中...</div>;
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-start">
-                <div>
-                    <p className="text-sm text-gray-500">管理系統使用者帳號與角色</p>
-                    <p className="text-xs text-yellow-600 mt-0.5">⚠️ 目前為本機模擬帳號，串接 Supabase 後將使用真實認證</p>
-                </div>
-                <button onClick={() => setAdding(true)} className="flex-shrink-0 px-4 py-2 bg-gray-900 text-white text-sm rounded-xl font-medium hover:bg-gray-700 transition-colors ml-4">+ 新增帳號</button>
+            <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-500">管理系統使用者帳號與角色</p>
+                <button onClick={() => { setAdding(true); setApiError(''); }} className="flex-shrink-0 px-4 py-2 bg-gray-900 text-white text-sm rounded-xl font-medium hover:bg-gray-700 transition-colors ml-4">+ 新增帳號</button>
             </div>
+
+            {apiError && <p className="text-xs text-red-500">{apiError}</p>}
+
             {adding && (
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                         <input autoFocus type="text" placeholder="姓名 *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white" />
-                        <input type="email" placeholder="Email *" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white" />
-                        <input type="password" placeholder="密碼" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white" />
-                        <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white">
+                        <input type="text" placeholder="帳號 *" value={form.account} onChange={e => setForm(f => ({ ...f, account: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white" />
+                        <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white col-span-2">
                             {Object.entries(ROLE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleAdd} className="px-4 py-1.5 bg-gray-900 text-white text-sm rounded-lg">新增</button>
-                        <button onClick={() => { setAdding(false); setForm({ name:'',email:'',password:'123456',role:'site' }); }} className="px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-200 rounded-lg">取消</button>
+                        <button onClick={() => { setAdding(false); setForm({ name:'', account:'', role:'site' }); }} className="px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-200 rounded-lg">取消</button>
                     </div>
                 </div>
             )}
+
             <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                {users.length === 0 && <div className="py-8 text-center text-sm text-gray-300">尚無帳號</div>}
                 {users.map(u => (
-                    <div key={u.id} className={`bg-white px-4 py-3 ${!u.active ? 'opacity-50' : ''}`}>
+                    <div key={u.id} className="bg-white px-4 py-3">
                         {editId === u.id ? (
                             <div className="space-y-2">
                                 <div className="grid grid-cols-2 gap-2">
                                     <input autoFocus type="text" placeholder="姓名 *" value={editForm.name||''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
-                                    <input type="email" placeholder="Email *" value={editForm.email||''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
-                                    <input type="password" placeholder="新密碼（留空不變）" value={editForm.password||''} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
-                                    <select value={editForm.role||'site'} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50">
+                                    <input type="text" placeholder="帳號" value={editForm.account||''} onChange={e => setEditForm(f => ({ ...f, account: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
+                                    <select value={editForm.role||'site'} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50 col-span-2">
                                         {Object.entries(ROLE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                                     </select>
                                 </div>
@@ -507,13 +555,13 @@ function UsersTab({ settings, setSettings }) {
                                             u.role === 'site' ? 'bg-orange-100 text-orange-700' :
                                             'bg-green-100 text-green-700'
                                         }`}>{ROLE_LABELS[u.role] || u.role}</span>
-                                        {!u.active && <span className="text-xs text-gray-400">（停用）</span>}
+                                        {u.mustChangePassword && <span className="text-xs text-amber-500">（待設定密碼）</span>}
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-0.5">{u.email}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">{u.account}</p>
                                 </div>
                                 <div className="flex gap-2 flex-shrink-0 ml-2">
-                                    <button onClick={() => toggleActive(u.id)} className={`text-xs ${u.active ? 'text-gray-400 hover:text-yellow-600' : 'text-green-500 hover:text-green-700'}`}>{u.active ? '停用' : '啟用'}</button>
-                                    <button onClick={() => { setEditId(u.id); setEditForm({ name:u.name, email:u.email, password:'', role:u.role }); }} className="text-xs text-gray-400 hover:text-gray-700">編輯</button>
+                                    <button onClick={() => handleResetPassword(u.id, u.name)} className="text-xs text-amber-500 hover:text-amber-700">重置密碼</button>
+                                    <button onClick={() => { setEditId(u.id); setEditForm({ name:u.name, account:u.account, role:u.role }); }} className="text-xs text-gray-400 hover:text-gray-700">編輯</button>
                                     <button onClick={() => handleDelete(u.id)} className="text-xs text-red-400 hover:text-red-600">刪除</button>
                                 </div>
                             </div>
@@ -521,6 +569,13 @@ function UsersTab({ settings, setSettings }) {
                     </div>
                 ))}
             </div>
+
+            {successMsg && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex justify-between items-center">
+                    <span>{successMsg}</span>
+                    <button onClick={() => setSuccessMsg('')} className="text-green-400 hover:text-green-600 ml-3">✕</button>
+                </div>
+            )}
         </div>
     );
 }
@@ -539,6 +594,7 @@ export function SettingsPage() {
     const [activeTab, setActiveTab] = useState('projects');
     const { settings, updateSettings } = useSettings();
     const setSettings = (next) => updateSettings(typeof next === 'function' ? next(settings) : next);
+    const [dbUsers, setDbUsers] = useState([]);
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
@@ -560,10 +616,10 @@ export function SettingsPage() {
                 <h2 className="text-lg font-bold text-gray-900 mb-5">
                     {TABS.find(t => t.key === activeTab)?.label}
                 </h2>
-                {activeTab === 'projects' && <ProjectTab />}
+                {activeTab === 'projects' && <ProjectTab allUsers={dbUsers} />}
                 {activeTab === 'steps'    && <StepsTab settings={settings} setSettings={setSettings} />}
                 {activeTab === 'vendors'  && <VendorsTab settings={settings} setSettings={setSettings} />}
-                {activeTab === 'users'    && <UsersTab settings={settings} setSettings={setSettings} />}
+                {activeTab === 'users'    && <UsersTab onUsersChange={setDbUsers} />}
             </div>
         </div>
     );

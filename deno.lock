@@ -17,6 +17,7 @@
         "npm:@types/react@^19.2.5",
         "npm:@vitejs/plugin-react@^5.1.1",
         "npm:autoprefixer@^10.4.22",
+        "npm:bcryptjs@^3.0.3",
         "npm:eslint-plugin-react-hooks@^7.0.1",
         "npm:eslint-plugin-react-refresh@~0.4.24",
         "npm:eslint@^9.39.1",
@@ -33,7 +34,8 @@
         "npm:react-to-print@^3.3.0",
         "npm:react@^19.2.0",
         "npm:tailwindcss@^4.1.14",
-        "npm:vite@^7.2.4"
+        "npm:vite@^7.2.4",
+        "npm:xlsx@~0.18.5"
       ]
     }
   }
