@@ -55,12 +55,7 @@ export default function App() {
         }
     });
     const [reportTitle, setReportTitle] = useState(() => localStorage.getItem('site_report_title') || '施工照片');
-    const [calendarEntries, setCalendarEntries] = useState(() => {
-        try {
-            const saved = localStorage.getItem('calendar_entries');
-            return saved ? JSON.parse(saved) : [];
-        } catch { return []; }
-    });
+    const [calendarEntries, setCalendarEntries] = useState([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const reportRef = useRef(null);
@@ -76,10 +71,27 @@ export default function App() {
     }, [entries, reportTitle]);
 
     useEffect(() => {
-        try {
-            localStorage.setItem('calendar_entries', JSON.stringify(calendarEntries));
-        } catch { console.warn("暫存已滿"); }
-    }, [calendarEntries]);
+        fetch('/api/calendar').then(r => r.json()).then(data => setCalendarEntries(data)).catch(() => {});
+    }, []);
+
+    const deleteCalendarEntry = async (id) => {
+        setCalendarEntries(prev => prev.filter(e => e.id !== id));
+        fetch(`/api/calendar?id=${id}`, { method: 'DELETE' }).catch(() => {});
+    };
+
+    const saveToCalendar = async () => {
+        const existingIds = new Set(calendarEntries.map(e => e.id));
+        const toAdd = entries.filter(e => !existingIds.has(e.id));
+        if (toAdd.length === 0) return;
+        setCalendarEntries(prev => [...prev, ...toAdd]);
+        for (const entry of toAdd) {
+            fetch('/api/calendar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(entry),
+            }).catch(() => {});
+        }
+    };
 
     const handleImageUpload = async (id, e) => {
         const files = Array.from(e.target.files); 
@@ -282,16 +294,12 @@ export default function App() {
                         <h1 className="text-2xl font-bold flex items-center gap-2">🏗️ 工地現場</h1>
                         {view === 'photo' && (
                             <div className="flex gap-2">
-                                <button onClick={() => { localStorage.removeItem('site_report_data'); localStorage.removeItem('site_report_title'); window.location.reload(); }} className="text-xs text-red-400 px-2 font-bold font-sans">重置</button>
+                                <button onClick={() => { localStorage.removeItem('site_report_data'); localStorage.removeItem('site_report_title'); setEntries([{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }]); setReportTitle('施工照片'); }} className="text-xs text-red-400 px-2 font-bold font-sans">重置</button>
                                 <button onClick={() => setEntries([...entries, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }])} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold shadow">+ 新增單筆</button>
                                 <button onClick={generateImage} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold shadow">輸出圖片</button>
                                 <button onClick={generatePDF} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow">生成 PDF</button>
-                                <button onClick={() => {
-                                    setCalendarEntries(prev => {
-                                        const existingIds = new Set(prev.map(e => e.id));
-                                        const toAdd = entries.filter(e => !existingIds.has(e.id));
-                                        return [...prev, ...toAdd];
-                                    });
+                                <button onClick={async () => {
+                                    await saveToCalendar();
                                     setCalendarJumpDate(new Date());
                                     setView('calendar');
                                 }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow">儲存到日歷</button>
@@ -346,7 +354,7 @@ export default function App() {
                 ) : view === 'codePlan' ? (
                     <PlanMeasurementRecorder key="planMeasure" defaultTitle="代號量測尺寸" />
                 ) : view === 'calendar' ? (
-                    <CalendarView entries={calendarEntries} onDeleteEntry={(id) => setCalendarEntries(prev => prev.filter(e => e.id !== id))} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
+                    <CalendarView entries={calendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
                 ) : (
                     <CodeMeasurementRecorder key="codeMeasure" defaultTitle="代號量測尺寸" />
                 )}
@@ -354,7 +362,7 @@ export default function App() {
                 {(isProcessing || isGenerating) && <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center font-bold text-white backdrop-blur-sm shadow-2xl font-sans"><Icons.Loader />處理中，請稍候...</div>}
             </div>
             ) : activeSection === 'calendar' ? (
-                <CalendarView entries={calendarEntries} onDeleteEntry={(id) => setCalendarEntries(prev => prev.filter(e => e.id !== id))} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
+                <CalendarView entries={calendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
             ) : activeSection === 'dashboard' ? (
                 <DashboardPage />
             ) : activeSection === 'drawing' ? (
