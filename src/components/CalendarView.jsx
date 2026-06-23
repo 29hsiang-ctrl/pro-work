@@ -41,7 +41,7 @@ function formatSelectedDate(date) {
     return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日 (${weekdays[date.getDay()]})`;
 }
 
-export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, onAddEntry }) {
+export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, onAddEntry, onRefresh }) {
     const today = new Date();
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth());
@@ -96,6 +96,7 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
             {/* 日期標題 */}
             <div className="px-5 pt-6 pb-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-800">{formatSelectedDate(selectedDate)}</h2>
+                <div className="flex items-center gap-2">
                 {selectedImages.length > 0 && (
                     <button
                         onClick={handleDownloadSelected}
@@ -104,6 +105,12 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                         <DownloadIcon />下載照片 ({selectedImages.length})
                     </button>
                 )}
+                {onRefresh && (
+                    <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 hover:bg-gray-100 rounded-full transition-colors" title="重新整理">
+                        ↻
+                    </button>
+                )}
+                </div>
             </div>
 
             {/* 月份導覽 */}

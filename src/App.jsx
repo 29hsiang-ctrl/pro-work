@@ -70,9 +70,17 @@ export default function App() {
         } catch { console.warn("暫存已滿"); }
     }, [entries, reportTitle]);
 
+    const fetchCalendarEntries = () => {
+        fetch('/api/calendar').then(r => r.json()).then(data => Array.isArray(data) && setCalendarEntries(data)).catch(() => {});
+    };
+
+    useEffect(() => { fetchCalendarEntries(); }, []);
+
     useEffect(() => {
-        fetch('/api/calendar').then(r => r.json()).then(data => setCalendarEntries(data)).catch(() => {});
-    }, []);
+        if (mainSection === 'calendar' || (mainSection === 'site' && view === 'calendar')) {
+            fetchCalendarEntries();
+        }
+    }, [mainSection, view]);
 
     const deleteCalendarEntry = async (id) => {
         setCalendarEntries(prev => prev.filter(e => e.id !== id));
@@ -354,7 +362,7 @@ export default function App() {
                 ) : view === 'codePlan' ? (
                     <PlanMeasurementRecorder key="planMeasure" defaultTitle="代號量測尺寸" />
                 ) : view === 'calendar' ? (
-                    <CalendarView entries={calendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
+                    <CalendarView entries={calendarEntries} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
                 ) : (
                     <CodeMeasurementRecorder key="codeMeasure" defaultTitle="代號量測尺寸" />
                 )}
@@ -362,7 +370,7 @@ export default function App() {
                 {(isProcessing || isGenerating) && <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center font-bold text-white backdrop-blur-sm shadow-2xl font-sans"><Icons.Loader />處理中，請稍候...</div>}
             </div>
             ) : activeSection === 'calendar' ? (
-                <CalendarView entries={calendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
+                <CalendarView entries={calendarEntries} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
             ) : activeSection === 'dashboard' ? (
                 <DashboardPage />
             ) : activeSection === 'drawing' ? (
