@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import JSZip from 'jszip';
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -83,8 +84,24 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
     const selectedImages = selectedEntries
         .flatMap((e, ei) => (e.images || []).map((img, idx) => ({ dataUrl: img.preview, name: `${e.date}_${e.floor || ''}_${ei + 1}_${idx + 1}.jpg` })));
 
-    const handleDownloadSelected = () => {
-        selectedImages.forEach(({ dataUrl, name }, i) => setTimeout(() => downloadImage(dataUrl, name), i * 100));
+    const handleDownloadSelected = async () => {
+        if (selectedImages.length === 1) {
+            downloadImage(selectedImages[0].dataUrl, selectedImages[0].name);
+            return;
+        }
+        const zip = new JSZip();
+        selectedImages.forEach(({ dataUrl, name }) => {
+            const base64 = dataUrl.split(',')[1];
+            zip.file(name, base64, { base64: true });
+        });
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = selectedDate ? `${selectedDate.getFullYear()}${String(selectedDate.getMonth()+1).padStart(2,'0')}${String(selectedDate.getDate()).padStart(2,'0')}` : 'photos';
+        a.href = url;
+        a.download = `照片_${dateStr}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const cells = [];
@@ -176,9 +193,18 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                                 <div className="flex items-center gap-2">
                                     {e.images?.length > 1 && (
                                         <button
-                                            onClick={() => e.images.forEach((img, idx) => {
-                                                setTimeout(() => downloadImage(img.preview, `${e.date}_${e.floor || ''}_${idx + 1}.jpg`), idx * 100);
-                                            })}
+                                            onClick={async () => {
+                                                const zip = new JSZip();
+                                                e.images.forEach((img, idx) => {
+                                                    const base64 = img.preview.split(',')[1];
+                                                    zip.file(`${e.date}_${e.floor || ''}_${idx + 1}.jpg`, base64, { base64: true });
+                                                });
+                                                const blob = await zip.generateAsync({ type: 'blob' });
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url; a.download = `照片_${e.date}.zip`; a.click();
+                                                URL.revokeObjectURL(url);
+                                            }}
                                             className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
                                         >
                                             <DownloadIcon />全部下載
