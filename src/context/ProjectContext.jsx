@@ -43,17 +43,12 @@ export function ProjectProvider({ children }) {
     const [dbError, setDbError]           = useState(null);
 
     useEffect(() => {
-        Promise.all([
-            api.get('/projects'),
-            api.get('/groups'),
-            api.get('/drawings'),
-            api.get('/factory'),
-        ])
-        .then(([p, g, d, f]) => {
-            setProjects(p);
-            setGroups(g);
-            setDrawings(d);
-            setFactorySteps(f);
+        api.get('/init')
+        .then(({ projects, groups, drawings, factorySteps }) => {
+            setProjects(projects);
+            setGroups(groups);
+            setDrawings(drawings);
+            setFactorySteps(factorySteps);
         })
         .catch(e => setDbError(e.message))
         .finally(() => setLoading(false));
