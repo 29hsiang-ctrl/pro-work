@@ -124,12 +124,6 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
         await downloadZip(selectedImages, `照片_${dateStr}.zip`);
     };
 
-    const handleEntryDownload = async (e) => {
-        const images = (e.images || []).map((img, idx) => ({ dataUrl: img.preview, name: `${e.date}_${e.floor || ''}_${idx + 1}.jpg` }));
-        if (isIOS) { setPhotoModal(images); return; }
-        await downloadZip(images, `照片_${e.date}.zip`);
-    };
-
     const handleSingleDownload = (img, name) => {
         if (isIOS) { setPhotoModal([{ dataUrl: img.preview, name }]); return; }
         downloadImage(img.preview, name);
@@ -147,14 +141,22 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
             <div className="px-5 pt-6 pb-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-800">{formatSelectedDate(selectedDate)}</h2>
                 <div className="flex items-center gap-2">
-                    {selectedImages.length > 0 && (
+                    {selectedImages.length > 0 && (<>
                         <button
                             onClick={handleDownloadSelected}
                             className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded-full transition-colors"
                         >
-                            <DownloadIcon />{isIOS ? `查看照片 (${selectedImages.length})` : `下載照片 (${selectedImages.length})`}
+                            <DownloadIcon />{isIOS ? `查看照片 (${selectedImages.length})` : `下載當日照片 (${selectedImages.length})`}
                         </button>
-                    )}
+                        {isIOS && (
+                            <button
+                                onClick={async () => { const dateStr = selectedDate ? `${selectedDate.getFullYear()}${String(selectedDate.getMonth()+1).padStart(2,'0')}${String(selectedDate.getDate()).padStart(2,'0')}` : 'photos'; await downloadZip(selectedImages, `照片_${dateStr}.zip`); }}
+                                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-full transition-colors"
+                            >
+                                <DownloadIcon />下載 ZIP
+                            </button>
+                        )}
+                    </>)}
                     {onRefresh && (
                         <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 hover:bg-gray-100 rounded-full transition-colors" title="重新整理">
                             ↻
@@ -224,14 +226,6 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium px-3 py-1 rounded-full border border-gray-300 text-gray-600">照片黏貼</span>
                                 <div className="flex items-center gap-2">
-                                    {e.images?.length > 1 && (
-                                        <button
-                                            onClick={() => handleEntryDownload(e)}
-                                            className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
-                                        >
-                                            <DownloadIcon />{isIOS ? '查看全部' : '全部下載'}
-                                        </button>
-                                    )}
                                     <button onClick={() => onDeleteEntry?.(e.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">刪除</button>
                                 </div>
                             </div>
