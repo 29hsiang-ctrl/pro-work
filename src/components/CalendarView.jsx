@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import JSZip from 'jszip';
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) && !window.MSStream;
 
 function downloadImage(dataUrl, filename) {
     const a = document.createElement('a');
@@ -10,11 +11,40 @@ function downloadImage(dataUrl, filename) {
     a.click();
 }
 
+async function downloadZip(images, zipName) {
+    const zip = new JSZip();
+    images.forEach(({ dataUrl, name }) => {
+        const base64 = dataUrl.split(',')[1];
+        zip.file(name, base64, { base64: true });
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = zipName; a.click();
+    URL.revokeObjectURL(url);
+}
+
 function DownloadIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
         </svg>
+    );
+}
+
+function PhotoModal({ images, onClose }) {
+    return (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+                <span className="text-white text-sm font-medium">長按照片可儲存至相簿</span>
+                <button onClick={onClose} className="text-white text-2xl leading-none px-2">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
+                {images.map(({ dataUrl, name }, i) => (
+                    <img key={i} src={dataUrl} alt={name} className="w-full rounded-xl" />
+                ))}
+            </div>
+        </div>
     );
 }
 
@@ -47,6 +77,7 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth());
     const [selectedDate, setSelectedDate] = useState(today);
+    const [photoModal, setPhotoModal] = useState(null);
 
     useEffect(() => {
         if (!jumpDate) return;
@@ -68,7 +99,6 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // 計算每天有幾筆照片記錄
     const dotsByDay = {};
     entries.forEach(e => {
         const d = parseROCDate(e.date);
@@ -85,23 +115,24 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
         .flatMap((e, ei) => (e.images || []).map((img, idx) => ({ dataUrl: img.preview, name: `${e.date}_${e.floor || ''}_${ei + 1}_${idx + 1}.jpg` })));
 
     const handleDownloadSelected = async () => {
+        if (isIOS) { setPhotoModal(selectedImages); return; }
         if (selectedImages.length === 1) {
             downloadImage(selectedImages[0].dataUrl, selectedImages[0].name);
             return;
         }
-        const zip = new JSZip();
-        selectedImages.forEach(({ dataUrl, name }) => {
-            const base64 = dataUrl.split(',')[1];
-            zip.file(name, base64, { base64: true });
-        });
-        const blob = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
         const dateStr = selectedDate ? `${selectedDate.getFullYear()}${String(selectedDate.getMonth()+1).padStart(2,'0')}${String(selectedDate.getDate()).padStart(2,'0')}` : 'photos';
-        a.href = url;
-        a.download = `照片_${dateStr}.zip`;
-        a.click();
-        URL.revokeObjectURL(url);
+        await downloadZip(selectedImages, `照片_${dateStr}.zip`);
+    };
+
+    const handleEntryDownload = async (e) => {
+        const images = (e.images || []).map((img, idx) => ({ dataUrl: img.preview, name: `${e.date}_${e.floor || ''}_${idx + 1}.jpg` }));
+        if (isIOS) { setPhotoModal(images); return; }
+        await downloadZip(images, `照片_${e.date}.zip`);
+    };
+
+    const handleSingleDownload = (img, name) => {
+        if (isIOS) { setPhotoModal([{ dataUrl: img.preview, name }]); return; }
+        downloadImage(img.preview, name);
     };
 
     const cells = [];
@@ -110,23 +141,25 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
 
     return (
         <div className="min-h-screen bg-white text-gray-800 font-sans">
+            {photoModal && <PhotoModal images={photoModal} onClose={() => setPhotoModal(null)} />}
+
             {/* 日期標題 */}
             <div className="px-5 pt-6 pb-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-800">{formatSelectedDate(selectedDate)}</h2>
                 <div className="flex items-center gap-2">
-                {selectedImages.length > 0 && (
-                    <button
-                        onClick={handleDownloadSelected}
-                        className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded-full transition-colors"
-                    >
-                        <DownloadIcon />下載照片 ({selectedImages.length})
-                    </button>
-                )}
-                {onRefresh && (
-                    <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 hover:bg-gray-100 rounded-full transition-colors" title="重新整理">
-                        ↻
-                    </button>
-                )}
+                    {selectedImages.length > 0 && (
+                        <button
+                            onClick={handleDownloadSelected}
+                            className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded-full transition-colors"
+                        >
+                            <DownloadIcon />{isIOS ? `查看照片 (${selectedImages.length})` : `下載照片 (${selectedImages.length})`}
+                        </button>
+                    )}
+                    {onRefresh && (
+                        <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 hover:bg-gray-100 rounded-full transition-colors" title="重新整理">
+                            ↻
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -193,21 +226,10 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                                 <div className="flex items-center gap-2">
                                     {e.images?.length > 1 && (
                                         <button
-                                            onClick={async () => {
-                                                const zip = new JSZip();
-                                                e.images.forEach((img, idx) => {
-                                                    const base64 = img.preview.split(',')[1];
-                                                    zip.file(`${e.date}_${e.floor || ''}_${idx + 1}.jpg`, base64, { base64: true });
-                                                });
-                                                const blob = await zip.generateAsync({ type: 'blob' });
-                                                const url = URL.createObjectURL(blob);
-                                                const a = document.createElement('a');
-                                                a.href = url; a.download = `照片_${e.date}.zip`; a.click();
-                                                URL.revokeObjectURL(url);
-                                            }}
+                                            onClick={() => handleEntryDownload(e)}
                                             className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
                                         >
-                                            <DownloadIcon />全部下載
+                                            <DownloadIcon />{isIOS ? '查看全部' : '全部下載'}
                                         </button>
                                     )}
                                     <button onClick={() => onDeleteEntry?.(e.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">刪除</button>
@@ -222,10 +244,10 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                                         <div key={idx} className="flex flex-col items-center gap-1">
                                             <img src={img.preview} className="w-28 h-28 object-cover rounded-xl shadow-sm" />
                                             <button
-                                                onClick={() => downloadImage(img.preview, `${e.date}_${e.floor || ''}_${idx + 1}.jpg`)}
+                                                onClick={() => handleSingleDownload(img, `${e.date}_${e.floor || ''}_${idx + 1}.jpg`)}
                                                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 transition-colors"
                                             >
-                                                <DownloadIcon />下載
+                                                <DownloadIcon />{isIOS ? '查看' : '下載'}
                                             </button>
                                         </div>
                                     ))}

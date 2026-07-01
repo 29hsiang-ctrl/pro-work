@@ -8,7 +8,7 @@ import { CodeMeasurementRecorder } from './components/CodeMeasurementRecorder';
 import { PlanMeasurementRecorder } from './components/PlanMeasurementRecorder';
 import { PreviewPage } from './components/PreviewPage';
 import { CalendarView } from './components/CalendarView';
-import { getROCDate, compressImage } from './utils/helpers';
+import { getROCDate, compressImage, applyWatermark } from './utils/helpers';
 import { useAuth } from './context/AuthContext';
 import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
@@ -58,6 +58,7 @@ export default function App() {
     const [calendarEntries, setCalendarEntries] = useState([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [savedMsg, setSavedMsg] = useState(false);
     const reportRef = useRef(null);
 
     useEffect(() => { document.title = "PRO-WORK"; }, []);
@@ -91,14 +92,23 @@ export default function App() {
         const existingIds = new Set(calendarEntries.map(e => e.id));
         const toAdd = entries.filter(e => !existingIds.has(e.id));
         if (toAdd.length === 0) return;
-        setCalendarEntries(prev => [...prev, ...toAdd]);
-        for (const entry of toAdd) {
+        const processed = await Promise.all(toAdd.map(async entry => {
+            const watermarkText = [entry.date, entry.floor, entry.direction, entry.item, entry.content].filter(Boolean).join('-');
+            const images = await Promise.all(
+                (entry.images || []).map(async img => ({ ...img, preview: await applyWatermark(img.preview, watermarkText) }))
+            );
+            return { ...entry, images };
+        }));
+        setCalendarEntries(prev => [...prev, ...processed]);
+        for (const entry of processed) {
             fetch('/api/calendar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(entry),
             }).catch(() => {});
         }
+        setSavedMsg(true);
+        setTimeout(() => setSavedMsg(false), 1500);
     };
 
     const handleImageUpload = async (id, e) => {
@@ -306,11 +316,7 @@ export default function App() {
                                 <button onClick={() => setEntries([...entries, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }])} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold shadow">+ 新增單筆</button>
                                 <button onClick={generateImage} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold shadow">輸出圖片</button>
                                 <button onClick={generatePDF} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow">生成 PDF</button>
-                                <button onClick={async () => {
-                                    await saveToCalendar();
-                                    setCalendarJumpDate(new Date());
-                                    setView('calendar');
-                                }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow">儲存到日歷</button>
+                                <button onClick={saveToCalendar} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow">儲存到日歷</button>
                             </div>
                         )}
                     </div>
@@ -368,6 +374,7 @@ export default function App() {
                 )}
                 
                 {(isProcessing || isGenerating) && <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center font-bold text-white backdrop-blur-sm shadow-2xl font-sans"><Icons.Loader />處理中，請稍候...</div>}
+                {savedMsg && <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-lg font-sans pointer-events-none">已儲存到日曆</div>}
             </div>
             ) : activeSection === 'calendar' ? (
                 <CalendarView entries={calendarEntries} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
