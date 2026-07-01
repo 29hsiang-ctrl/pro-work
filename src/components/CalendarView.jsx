@@ -11,6 +11,20 @@ function downloadImage(dataUrl, filename) {
     a.click();
 }
 
+async function shareImages(images) {
+    const files = images.map(({ dataUrl, name }) => {
+        const [header, b64] = dataUrl.split(',');
+        const mime = header.match(/:(.*?);/)[1];
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        return new File([bytes], name, { type: mime });
+    });
+    if (navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({ files, title: '工地照片' });
+    } else {
+        await downloadZip(images, '照片.zip');
+    }
+}
+
 async function downloadZip(images, zipName) {
     const zip = new JSZip();
     images.forEach(({ dataUrl, name }) => {
@@ -150,7 +164,7 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                         </button>
                         {isIOS && (
                             <button
-                                onClick={async () => { const dateStr = selectedDate ? `${selectedDate.getFullYear()}${String(selectedDate.getMonth()+1).padStart(2,'0')}${String(selectedDate.getDate()).padStart(2,'0')}` : 'photos'; await downloadZip(selectedImages, `照片_${dateStr}.zip`); }}
+                                onClick={() => shareImages(selectedImages)}
                                 className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded-full transition-colors"
                             >
                                 <DownloadIcon />下載當日照片 ({selectedImages.length})
