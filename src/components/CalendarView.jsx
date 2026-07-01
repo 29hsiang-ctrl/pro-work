@@ -151,9 +151,9 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                         {isIOS && (
                             <button
                                 onClick={async () => { const dateStr = selectedDate ? `${selectedDate.getFullYear()}${String(selectedDate.getMonth()+1).padStart(2,'0')}${String(selectedDate.getDate()).padStart(2,'0')}` : 'photos'; await downloadZip(selectedImages, `照片_${dateStr}.zip`); }}
-                                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-full transition-colors"
+                                className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded-full transition-colors"
                             >
-                                <DownloadIcon />下載 ZIP
+                                <DownloadIcon />下載當日照片 ({selectedImages.length})
                             </button>
                         )}
                     </>)}
