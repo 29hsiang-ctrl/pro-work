@@ -240,7 +240,7 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium px-3 py-1 rounded-full border border-gray-300 text-gray-600">照片黏貼</span>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => onDeleteEntry?.(e.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">刪除</button>
+                                    <button onClick={() => { if (window.confirm('確定要刪除這筆記錄嗎？')) onDeleteEntry?.(e.id); }} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">刪除</button>
                                 </div>
                             </div>
                             <p className="text-sm text-gray-600 leading-relaxed">

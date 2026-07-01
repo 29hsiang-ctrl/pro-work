@@ -18,8 +18,9 @@ export const handler = async (event) => {
                 return ok({ ok: true });
             }
             case 'DELETE': {
-                const id = event.queryStringParameters?.id;
-                if (!id) return err(400, '缺少 id');
+                const rawId = event.queryStringParameters?.id;
+                if (!rawId) return err(400, '缺少 id');
+                const id = rawId && !isNaN(rawId) ? Number(rawId) : rawId;
                 await col.deleteOne({ _id: id });
                 return ok({ ok: true });
             }
