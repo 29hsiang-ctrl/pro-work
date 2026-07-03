@@ -32,13 +32,23 @@ function uid() { return Math.random().toString(36).slice(2, 10); }
 
 const ProjectContext = createContext(null);
 
+function initFromCache() {
+    try {
+        const raw = localStorage.getItem('prowork_init_cache');
+        if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+}
+
 export function ProjectProvider({ children }) {
     const { settings } = useSettings();
 
-    const [projects, setProjects]         = useState([]);
-    const [groups, setGroups]             = useState([]);
-    const [drawings, setDrawings]         = useState([]);
-    const [factorySteps, setFactorySteps] = useState([]);
+    const cached = initFromCache();
+    const [projects, setProjects]         = useState(cached?.projects ?? []);
+    const [groups, setGroups]             = useState(cached?.groups ?? []);
+    const [drawings, setDrawings]         = useState(cached?.drawings ?? []);
+    const [factorySteps, setFactorySteps] = useState(cached?.factorySteps ?? []);
+    const [hasCachedData]                 = useState(!!cached);
     const [loading, setLoading]           = useState(true);
     const [dbError, setDbError]           = useState(null);
 
@@ -49,6 +59,7 @@ export function ProjectProvider({ children }) {
             setGroups(groups);
             setDrawings(drawings);
             setFactorySteps(factorySteps);
+            localStorage.setItem('prowork_init_cache', JSON.stringify({ projects, groups, drawings, factorySteps }));
         })
         .catch(e => setDbError(e.message))
         .finally(() => setLoading(false));
@@ -155,7 +166,7 @@ export function ProjectProvider({ children }) {
 
     const value = {
         projects, groups, drawings, factorySteps,
-        loading, dbError,
+        loading, dbError, hasCachedData,
         addProject, updateProject, deleteProject,
         addGroup, updateGroup, deleteGroup,
         addDrawingRevision, updateDrawing, deleteDrawing,

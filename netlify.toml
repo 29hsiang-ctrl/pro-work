@@ -12,6 +12,9 @@
   node_bundler = "esbuild"
   directory = "netlify/functions"
 
+[functions."warmup"]
+  schedule = "*/5 * * * *"
+
 [[redirects]]
   from = "/api/projects"
   to = "/.netlify/functions/projects"

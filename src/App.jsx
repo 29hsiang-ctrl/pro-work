@@ -41,7 +41,7 @@ const VIEW_MENU = [
 export default function App() {
     const { user, logout } = useAuth();
     const { canAccess } = usePermission();
-    const { loading: dbLoading, dbError } = useProject();
+    const { loading: dbLoading, dbError, hasCachedData } = useProject();
     const [mainSection, setMainSection] = useState('dashboard');
     const [view, setView] = useState('photo');
     const [menuOpen, setMenuOpen] = useState(false);
@@ -55,7 +55,12 @@ export default function App() {
         }
     });
     const [reportTitle, setReportTitle] = useState(() => localStorage.getItem('site_report_title') || '施工照片');
-    const [calendarEntries, setCalendarEntries] = useState([]);
+    const [calendarEntries, setCalendarEntries] = useState(() => {
+        try {
+            const raw = localStorage.getItem('prowork_calendar_cache');
+            return raw ? JSON.parse(raw) : [];
+        } catch { return []; }
+    });
     const [isGenerating, setIsGenerating] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [savedMsg, setSavedMsg] = useState(false);
@@ -72,7 +77,12 @@ export default function App() {
     }, [entries, reportTitle]);
 
     const fetchCalendarEntries = () => {
-        fetch('/api/calendar').then(r => r.json()).then(data => Array.isArray(data) && setCalendarEntries(data)).catch(() => {});
+        fetch('/api/calendar').then(r => r.json()).then(data => {
+            if (Array.isArray(data)) {
+                setCalendarEntries(data);
+                localStorage.setItem('prowork_calendar_cache', JSON.stringify(data));
+            }
+        }).catch(() => {});
     };
 
     useEffect(() => { fetchCalendarEntries(); }, []);
@@ -279,6 +289,7 @@ export default function App() {
 
     if (!user) return <LoginPage />;
     if (user.mustChangePassword) return <ChangePasswordPage />;
+    if (dbLoading && !hasCachedData) return <div className="flex items-center justify-center min-h-screen text-gray-400 font-sans text-sm">連線中...</div>;
     if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen text-red-400 font-sans gap-2"><p className="font-bold">資料庫連線失敗</p><p className="text-xs text-gray-400">{dbError}</p></div>;
 
     const visibleNav = MAIN_NAV.filter(s => canAccess(s.key));
@@ -287,7 +298,7 @@ export default function App() {
 
     return (
         <>
-            {dbLoading && (
+            {dbLoading && hasCachedData && (
                 <div className="fixed top-0 left-0 right-0 z-50 h-0.5 bg-gray-200 overflow-hidden">
                     <div className="h-full bg-blue-500 animate-[loading_1.5s_ease-in-out_infinite]" />
                 </div>
