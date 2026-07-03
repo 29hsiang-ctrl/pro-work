@@ -12,13 +12,20 @@ export const handler = async (event) => {
             db.collection('factorySteps').find({}).toArray(),
             db.collection('settings').findOne({ _id: 'global' }),
         ]);
-        return ok({
-            projects:     projects.map(({ _id, ...r }) => ({ id: _id, ...r })),
-            groups:       groups.map(({ _id, ...r }) => ({ id: _id, ...r })),
-            drawings:     drawings.map(({ _id, ...r }) => ({ id: _id, ...r })),
-            factorySteps: factorySteps.map(({ _id, ...r }) => ({ id: _id, ...r })),
-            settings:     settings || {},
-        });
+        return {
+            statusCode: 200,
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=300',
+            },
+            body: JSON.stringify({
+                projects:     projects.map(({ _id, ...r }) => ({ id: _id, ...r })),
+                groups:       groups.map(({ _id, ...r }) => ({ id: _id, ...r })),
+                drawings:     drawings.map(({ _id, ...r }) => ({ id: _id, ...r })),
+                factorySteps: factorySteps.map(({ _id, ...r }) => ({ id: _id, ...r })),
+                settings:     settings || {},
+            }),
+        };
     } catch (e) {
         console.error(e);
         return err(500, e.message);

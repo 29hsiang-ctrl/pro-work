@@ -66,7 +66,7 @@ export default function App() {
     const [savedMsg, setSavedMsg] = useState(false);
     const reportRef = useRef(null);
 
-    useEffect(() => { document.title = "PRO-WORK"; }, []);
+    useEffect(() => { document.title = "PRO-WORK"; document.getElementById('loading-splash')?.remove(); }, []);
 
     // --- [修正] 防止暫存爆掉 ---
     useEffect(() => {
