@@ -279,7 +279,6 @@ export default function App() {
 
     if (!user) return <LoginPage />;
     if (user.mustChangePassword) return <ChangePasswordPage />;
-    if (dbLoading) return <div className="flex items-center justify-center min-h-screen text-gray-400 font-sans text-sm">連線中...</div>;
     if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen text-red-400 font-sans gap-2"><p className="font-bold">資料庫連線失敗</p><p className="text-xs text-gray-400">{dbError}</p></div>;
 
     const visibleNav = MAIN_NAV.filter(s => canAccess(s.key));
@@ -288,6 +287,11 @@ export default function App() {
 
     return (
         <>
+            {dbLoading && (
+                <div className="fixed top-0 left-0 right-0 z-50 h-0.5 bg-gray-200 overflow-hidden">
+                    <div className="h-full bg-blue-500 animate-[loading_1.5s_ease-in-out_infinite]" />
+                </div>
+            )}
             {/* Pro Work 主導覽 */}
             <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm font-sans">
                 <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto">
