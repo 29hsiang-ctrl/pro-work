@@ -1,6 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
-import { jsPDF } from 'jspdf';
-import { toJpeg } from 'html-to-image';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { Icons } from './components/icons';
 import { EntryEditor } from './components/EntryEditor';
 import { MeasurementRecorder } from './components/MeasurementRecorder';
@@ -14,10 +12,11 @@ import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { useProject } from './context/ProjectContext';
-import { DashboardPage } from './pages/DashboardPage';
-import { DrawingPage } from './pages/DrawingPage';
-import { FactoryPage } from './pages/FactoryPage';
-import { SettingsPage } from './pages/SettingsPage';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const DrawingPage   = lazy(() => import('./pages/DrawingPage').then(m => ({ default: m.DrawingPage })));
+const FactoryPage   = lazy(() => import('./pages/FactoryPage').then(m => ({ default: m.FactoryPage })));
+const SettingsPage  = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 
 const MAIN_NAV = [
     { key: 'dashboard', label: '首頁' },
@@ -145,6 +144,8 @@ export default function App() {
     const generatePDF = async () => {
         setIsGenerating(true);
         try {
+            const { jsPDF } = await import('jspdf');
+            const { toJpeg } = await import('html-to-image');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pages = reportRef.current.children;
             
@@ -320,7 +321,7 @@ export default function App() {
                 </div>
             </div>
 
-            {activeSection === 'site' ? (
+            <Suspense fallback={null}>{activeSection === 'site' ? (
             <div className={`min-h-screen bg-gray-100 p-2 md:p-8 font-sans text-gray-800`}>
                 <div className="max-w-6xl mx-auto mb-6 flex flex-col gap-3">
                     <div className="flex justify-between items-center">
@@ -407,7 +408,7 @@ export default function App() {
                     <p className="text-xl font-semibold text-gray-400">{MAIN_NAV.find(s => s.key === activeSection)?.label}</p>
                     <p className="text-sm">開發中</p>
                 </div>
-            )}
+            )}</Suspense>
 
             <div className="absolute left-[-9999px] top-[-9999px] opacity-0 pointer-events-none">
                 <div ref={reportRef} style={{ margin: 0, padding: 0 }}>
