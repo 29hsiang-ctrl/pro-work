@@ -172,6 +172,21 @@ export function ProjectProvider({ children }) {
         await api.delete(`/factory?id=${id}`);
     };
 
+    const upsertFactoryStepDate = async (groupId, stepName, doneDate) => {
+        const existing = factorySteps.find(f => f.groupId === groupId && f.stepName === stepName);
+        if (existing) {
+            setFactorySteps(prev => prev.map(f => f.id === existing.id ? { ...f, doneDate } : f));
+            await api.put('/factory', { id: existing.id, doneDate });
+        } else {
+            const step = {
+                id: uid(), groupId, stepName, plannedDate: '', doneDate,
+                order: factorySteps.filter(f => f.groupId === groupId).length,
+            };
+            setFactorySteps(prev => [...prev, step]);
+            await api.post('/factory', step);
+        }
+    };
+
     const value = {
         projects, groups, drawings, factorySteps,
         loading, dbError, hasCachedData,
@@ -179,7 +194,7 @@ export function ProjectProvider({ children }) {
         addProject, updateProject, deleteProject,
         addGroup, updateGroup, deleteGroup,
         addDrawingRevision, updateDrawing, deleteDrawing,
-        updateFactoryStep, addFactoryStep, deleteFactoryStep,
+        updateFactoryStep, addFactoryStep, deleteFactoryStep, upsertFactoryStepDate,
     };
 
     return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

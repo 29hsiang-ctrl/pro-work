@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, Fragment } from 'react';
 import * as XLSX from 'xlsx';
-import { useProject, getDrawingStatus, ITEM_TYPES } from '../context/ProjectContext';
+import { useProject, getDrawingStatus, ITEM_TYPES, FACTORY_STEPS_BY_TYPE } from '../context/ProjectContext';
+import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 
 function useAllItemTypes() {
@@ -11,7 +12,7 @@ function useAllItemTypes() {
     } catch { return ITEM_TYPES; }
 }
 
-const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu }, ref) {
+const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu, style }, ref) {
     const [editing, setEditing] = useState(false);
     const inputRef = useRef(null);
 
@@ -27,6 +28,7 @@ const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu
 
     return (
         <div className="relative min-h-[1.1rem]"
+             style={style}
              onDoubleClick={() => setEditing(true)}
              onContextMenu={onContextMenu}>
             <input
@@ -65,7 +67,9 @@ function batchBgColor(tag) {
     return BATCH_BG_COLORS[h % BATCH_BG_COLORS.length];
 }
 
-const GRID = 'grid grid-cols-[1.5rem_2.5rem_6rem_1fr_5rem_3.5rem_6.5rem_6.5rem_6.5rem_6.5rem_4.5rem_2rem]';
+// 欄寬預設值（px）：toggle / # / 工料編號 / 項目名稱 / 類型 / 狀態 / 核准日期 / 下料 / 機械加工 / 組立 / 烤漆 / 送達工地 / delete
+const FACTORY_DEFAULT_WIDTHS = [24, 40, 80, 200, 80, 72, 96, 96, 96, 96, 96, 96, 32];
+const FACTORY_COL_LABELS = ['', '#', '工料編號', '項目名稱', '類型', '狀態', '核准日期', '下料日期', null, '組立', '烤漆', '送達工地', ''];
 
 function GroupManagementPanel({ open, onClose, batches, activeGroups, drawings, onRemoveFromBatch, onCreateBatch }) {
     const [expanded, setExpanded] = useState({});
@@ -175,19 +179,9 @@ function GroupManagementPanel({ open, onClose, batches, activeGroups, drawings, 
     );
 }
 
-function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdateGroup, isAdmin, selectMode, selected, onToggleSelect, onOpenDetail, depth = 0, hasChildren = false, isCollapsed = false, onToggleCollapse }) {
+function GroupRow({ group, allDr, onDeleteGroup, onUpdateGroup, isAdmin, selectMode, selected, onToggleSelect, onOpenDetail, depth = 0, hasChildren = false, isCollapsed = false, onToggleCollapse, factorySteps, onSetStepDate, machiningStep, gridStyle, colPos }) {
     const [editingType, setEditingType] = useState(false);
     const [typeValue, setTypeValue] = useState(group.type || '');
-    const [ctxMenu, setCtxMenu] = useState(null);
-    const [soloPending, setSoloPending] = useState(null);
-    const ctxRef = useRef(null);
-
-    const dateRefs = {
-        plannedSubmit: useRef(null),
-        submitDate:    useRef(null),
-        reviewDate:    useRef(null),
-        approveDate:   useRef(null),
-    };
 
     const sorted = [...allDr].sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
     const latest = sorted[sorted.length - 1];
@@ -195,152 +189,80 @@ function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdat
     const borderColor = batchBorderColor(group.batchTag);
     const bgColor = group.batchTag ? batchBgColor(group.batchTag) : '';
 
+    const getStepDate = (stepName) =>
+        factorySteps.find(f => f.groupId === group.id && f.stepName === stepName)?.doneDate || '';
+
     const handleTypeBlur = () => {
         onUpdateGroup(group.id, { type: typeValue });
         setEditingType(false);
     };
 
-    const handleDateRightClick = (e, field) => {
-        if (!group.batchTag) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setCtxMenu({ x: e.clientX, y: e.clientY, field });
-    };
-
-    const handleSoloEdit = () => {
-        const field = ctxMenu.field;
-        setCtxMenu(null);
-        setSoloPending(field);
-        dateRefs[field].current?.triggerEdit();
-    };
-
-    useEffect(() => {
-        if (!ctxMenu) return;
-        const onDown = (e) => { if (ctxRef.current && !ctxRef.current.contains(e.target)) setCtxMenu(null); };
-        const onKey  = (e) => { if (e.key === 'Escape') setCtxMenu(null); };
-        window.addEventListener('mousedown', onDown);
-        window.addEventListener('keydown', onKey);
-        return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
-    }, [ctxMenu]);
-
-    const makeOnChange = (field, drId) => (v) => {
-        if (soloPending === field) {
-            setSoloPending(null);
-            onUpdateSolo(drId, { [field]: v });
-        } else {
-            onUpdate(drId, { [field]: v });
-        }
-    };
-
     return (
-        <>
-            <div
-                className={`${GRID} gap-x-1 items-center px-2 py-2 border-b border-gray-100 text-xs transition-colors border-l-4 ${borderColor} ${bgColor || 'bg-white'} hover:brightness-95 ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selected ? 'ring-1 ring-inset ring-indigo-300' : ''}`}
-                onClick={() => selectMode && onToggleSelect()}
-            >
-                {selectMode ? (
-                    <div
-                        onClick={e => { e.stopPropagation(); onToggleSelect(); }}
-                        className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-colors ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 hover:border-indigo-400'}`}
-                    >
-                        {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
-                    </div>
-                ) : hasChildren ? (
-                    <button
-                        onClick={e => { e.stopPropagation(); onToggleCollapse(); }}
-                        className="text-gray-400 text-[10px] flex items-center justify-center hover:text-gray-600 cursor-pointer"
-                    >{isCollapsed ? '▶' : '▼'}</button>
-                ) : <span />}
-
-                <span className="text-gray-400 font-mono truncate">{group.itemNo || ''}</span>
-                <span className="text-gray-400 font-mono truncate">{group.code || ''}</span>
-                <span
-                    className="font-medium text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-0.5"
-                    title="雙擊查看詳細資訊"
-                    onDoubleClick={e => { e.stopPropagation(); onOpenDetail(); }}
+        <div
+            className={`gap-x-1 items-center px-2 py-2 border-b border-gray-100 text-xs transition-colors border-l-4 ${borderColor} ${bgColor || 'bg-white'} hover:brightness-95 ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selected ? 'ring-1 ring-inset ring-indigo-300' : ''}`}
+            style={gridStyle}
+            onClick={() => selectMode && onToggleSelect()}
+        >
+            {selectMode ? (
+                <div style={{ order: colPos[0] }}
+                    onClick={e => { e.stopPropagation(); onToggleSelect(); }}
+                    className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-colors ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 hover:border-indigo-400'}`}
                 >
-                    {depth > 0 && <span className="text-gray-300 flex-shrink-0">└</span>}
-                    <span className="truncate">{group.name}</span>
-                </span>
-
-                {editingType ? (
-                    <input
-                        autoFocus
-                        value={typeValue}
-                        onChange={e => setTypeValue(e.target.value)}
-                        onBlur={handleTypeBlur}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') handleTypeBlur();
-                            if (e.key === 'Escape') setEditingType(false);
-                        }}
-                        onClick={e => e.stopPropagation()}
-                        className="text-xs px-1 py-0.5 bg-gray-100 rounded border border-gray-300 outline-none w-full"
-                    />
-                ) : (
-                    <span
-                        onClick={e => { e.stopPropagation(); if (!selectMode) { setTypeValue(group.type || ''); setEditingType(true); } }}
-                        className="text-xs px-1.5 py-0.5 bg-white/70 text-gray-500 rounded cursor-pointer hover:bg-white truncate"
-                        title="點擊編輯類型"
-                    >{group.type || '未分類'}</span>
-                )}
-
-                <span className="text-gray-500 font-mono text-center">{latest?.rev || '—'}</span>
-
-                {latest ? (() => {
-                    const isApproved = !!latest.approveDate;
-                    const approveOnly = !!group.parentId;
-                    return (
-                        <>
-                            {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.plannedSubmit || '——')}</span>
-                                : <DateInput ref={dateRefs.plannedSubmit} value={latest.plannedSubmit}
-                                    onChange={makeOnChange('plannedSubmit', latest.id)}
-                                    onContextMenu={(e) => handleDateRightClick(e, 'plannedSubmit')} />
-                            }
-                            {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.submitDate || '——')}</span>
-                                : <DateInput ref={dateRefs.submitDate} value={latest.submitDate}
-                                    onChange={makeOnChange('submitDate', latest.id)}
-                                    onContextMenu={(e) => handleDateRightClick(e, 'submitDate')} />
-                            }
-                            {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.reviewDate || '——')}</span>
-                                : <DateInput ref={dateRefs.reviewDate} value={latest.reviewDate}
-                                    onChange={makeOnChange('reviewDate', latest.id)}
-                                    onContextMenu={(e) => handleDateRightClick(e, 'reviewDate')} />
-                            }
-                            <DateInput ref={dateRefs.approveDate} value={latest.approveDate}
-                                onChange={makeOnChange('approveDate', latest.id)}
-                                onContextMenu={(e) => handleDateRightClick(e, 'approveDate')} />
-                        </>
-                    );
-                })() : (
-                    <><span/><span/><span/><span/></>
-                )}
-
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap text-center ${status.cls}`}>{status.label}</span>
-
-                {isAdmin ? (
-                    <button
-                        onClick={e => { e.stopPropagation(); if (window.confirm(`刪除「${group.name}」？`)) onDeleteGroup(group.id); }}
-                        className="text-gray-200 hover:text-red-400 transition-colors text-center"
-                    >✕</button>
-                ) : <span />}
-            </div>
-
-            {ctxMenu && (
-                <div
-                    ref={ctxRef}
-                    style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y }}
-                    className="z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[9rem]"
-                >
-                    <button
-                        onClick={handleSoloEdit}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >單獨修改此日期</button>
+                    {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
                 </div>
+            ) : hasChildren ? (
+                <button style={{ order: colPos[0] }}
+                    onClick={e => { e.stopPropagation(); onToggleCollapse(); }}
+                    className="text-gray-400 text-[10px] flex items-center justify-center hover:text-gray-600 cursor-pointer"
+                >{isCollapsed ? '▶' : '▼'}</button>
+            ) : <span style={{ order: colPos[0] }} />}
+
+            <span style={{ order: colPos[1] }} className="text-gray-400 font-mono truncate">{group.itemNo || ''}</span>
+            <span style={{ order: colPos[2] }} className="text-gray-400 font-mono truncate">{group.code || ''}</span>
+            <span style={{ order: colPos[3] }}
+                className="font-medium text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-0.5"
+                title="雙擊查看詳細資訊"
+                onDoubleClick={e => { e.stopPropagation(); onOpenDetail(); }}
+            >
+                {depth > 0 && <span className="text-gray-300 flex-shrink-0">└</span>}
+                <span className="truncate">{group.name}</span>
+            </span>
+
+            {editingType ? (
+                <input style={{ order: colPos[4] }} autoFocus value={typeValue}
+                    onChange={e => setTypeValue(e.target.value)}
+                    onBlur={handleTypeBlur}
+                    onKeyDown={e => { if (e.key === 'Enter') handleTypeBlur(); if (e.key === 'Escape') setEditingType(false); }}
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs px-1 py-0.5 bg-gray-100 rounded border border-gray-300 outline-none w-full"
+                />
+            ) : (
+                <span style={{ order: colPos[4] }}
+                    onClick={e => { e.stopPropagation(); if (!selectMode) { setTypeValue(group.type || ''); setEditingType(true); } }}
+                    className="text-xs px-1.5 py-0.5 bg-white/70 text-gray-500 rounded cursor-pointer hover:bg-white truncate"
+                    title="點擊編輯類型"
+                >{group.type || '未分類'}</span>
             )}
-        </>
+
+            <span style={{ order: colPos[5] }} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap text-center ${status.cls}`}>{status.label}</span>
+
+            <span style={{ order: colPos[6] }} className={`text-xs select-none ${latest?.approveDate ? 'text-gray-600' : 'text-gray-300'}`}>
+                {latest?.approveDate || '——'}
+            </span>
+
+            <DateInput style={{ order: colPos[7] }} value={getStepDate('下料')} onChange={v => onSetStepDate(group.id, '下料', v)} />
+            <DateInput style={{ order: colPos[8] }} value={getStepDate(machiningStep)} onChange={v => onSetStepDate(group.id, machiningStep, v)} />
+            <DateInput style={{ order: colPos[9] }} value={getStepDate('組立')} onChange={v => onSetStepDate(group.id, '組立', v)} />
+            <DateInput style={{ order: colPos[10] }} value={getStepDate('烤漆')} onChange={v => onSetStepDate(group.id, '烤漆', v)} />
+            <DateInput style={{ order: colPos[11] }} value={getStepDate('送達工地')} onChange={v => onSetStepDate(group.id, '送達工地', v)} />
+
+            {isAdmin ? (
+                <button style={{ order: colPos[12] }}
+                    onClick={e => { e.stopPropagation(); if (window.confirm(`刪除「${group.name}」？`)) onDeleteGroup(group.id); }}
+                    className="text-gray-200 hover:text-red-400 transition-colors text-center"
+                >✕</button>
+            ) : <span style={{ order: colPos[12] }} />}
+        </div>
     );
 }
 
@@ -475,22 +397,120 @@ function DetailModal({ group, drawings, onClose, onUpdate }) {
 
 // ── FactoryPage ───────────────────────────────────────────────────
 export function FactoryPage() {
-    const { projects, groups, drawings, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing, selectedProjectId } = useProject();
+    const { projects, groups, drawings, factorySteps, upsertFactoryStepDate, updateGroup, deleteGroup, updateDrawing, selectedProjectId } = useProject();
+    const { settings } = useSettings();
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
 
-    const [activeProjectId, setActiveProjectId] = useState(selectedProjectId);
-    useEffect(() => { if (selectedProjectId) setActiveProjectId(selectedProjectId); }, [selectedProjectId]);
+    const activeProjectId = selectedProjectId;
 
     const [selectMode, setSelectMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [showBatchMenu, setShowBatchMenu] = useState(false);
     const [pendingBatchName, setPendingBatchName] = useState('');
-
     const [showPanel, setShowPanel] = useState(false);
-    const [undoStack, setUndoStack] = useState([]);
     const [detailGroupId, setDetailGroupId] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+
+    // 欄寬調整
+    const [colWidths, setColWidths] = useState(() => {
+        try {
+            const s = localStorage.getItem('pw_col_widths_factory');
+            if (s) { const a = JSON.parse(s); if (a.length === FACTORY_DEFAULT_WIDTHS.length) return a; }
+        } catch {}
+        return FACTORY_DEFAULT_WIDTHS;
+    });
+    const [colOrder, setColOrder] = useState(() => {
+        try {
+            const s = localStorage.getItem('pw_col_order_factory');
+            if (s) { const a = JSON.parse(s); if (a.length === FACTORY_DEFAULT_WIDTHS.length && a[0] === 0 && a[a.length - 1] === a.length - 1) return a; }
+        } catch {}
+        return FACTORY_DEFAULT_WIDTHS.map((_, i) => i);
+    });
+    const colPos = Object.fromEntries(colOrder.map((origIdx, displayPos) => [origIdx, displayPos]));
+    const [dragInfo, setDragInfo] = useState(null);
+    const headerRef = useRef(null);
+    const gridStyle = { display: 'grid', gridTemplateColumns: colOrder.map(i => colWidths[i] + 'px').join(' ') };
+    const startResize = (colIdx, e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = colWidths[colIdx];
+        const onMove = (me) => {
+            const newW = Math.max(32, startW + me.clientX - startX);
+            setColWidths(prev => {
+                const next = [...prev]; next[colIdx] = newW;
+                try { localStorage.setItem('pw_col_widths_factory', JSON.stringify(next)); } catch {}
+                return next;
+            });
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+    const startColDrag = (fromDisplayPos, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+        setDragInfo({ fromPos: fromDisplayPos, toPos: fromDisplayPos });
+        const getDropPos = (mouseX) => {
+            if (!headerRef.current) return fromDisplayPos;
+            const { left } = headerRef.current.getBoundingClientRect();
+            const x = mouseX - left;
+            let cumW = 0;
+            for (let i = 0; i < colOrder.length; i++) {
+                const w = colWidths[colOrder[i]];
+                if (x < cumW + w / 2) return Math.max(1, Math.min(colOrder.length - 2, i));
+                cumW += w;
+            }
+            return colOrder.length - 2;
+        };
+        const onMove = (me) => setDragInfo(prev => prev ? { ...prev, toPos: getDropPos(me.clientX) } : null);
+        const onUp = (me) => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            const toPos = getDropPos(me.clientX);
+            setDragInfo(null);
+            if (toPos !== fromDisplayPos) {
+                setColOrder(prev => {
+                    const next = [...prev];
+                    const [moved] = next.splice(fromDisplayPos, 1);
+                    next.splice(toPos, 0, moved);
+                    try { localStorage.setItem('pw_col_order_factory', JSON.stringify(next)); } catch {}
+                    return next;
+                });
+            }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    // Machining step column — selectable from step pool
+    const builtinStepOptions = [...new Set(Object.values(FACTORY_STEPS_BY_TYPE).flat())];
+    const customStepPool = settings?.customStepPool || [];
+    const allStepOptions = [...new Set([...builtinStepOptions, ...customStepPool])];
+    const [machiningStep, setMachiningStep] = useState('加工');
+    const [showStepDropdown, setShowStepDropdown] = useState(false);
+    const stepDropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!showStepDropdown) return;
+        const handler = (e) => {
+            if (stepDropdownRef.current && !stepDropdownRef.current.contains(e.target))
+                setShowStepDropdown(false);
+        };
+        window.addEventListener('mousedown', handler);
+        return () => window.removeEventListener('mousedown', handler);
+    }, [showStepDropdown]);
 
     const toggleCollapse = (id) => setCollapsedGroups(prev => {
         const next = new Set(prev);
@@ -509,7 +529,6 @@ export function FactoryPage() {
         .sort((a, b) => Number(a.itemNo || 999) - Number(b.itemNo || 999));
 
     const childGroups = groups.filter(g => g.projectId === activeProjectId && !!g.parentId && approvedTopLevel.some(p => p.id === g.parentId));
-
     const activeGroups = [...approvedTopLevel, ...childGroups];
 
     const orderedGroups = [];
@@ -555,91 +574,6 @@ export function FactoryPage() {
         setPendingBatchName('');
     };
 
-    const handleUpdateDrawing = async (drId, fields) => {
-        if (fields.submitDate) fields = { ...fields, plannedSubmit: '' };
-
-        const dr = drawings.find(d => d.id === drId);
-        if (!dr) return;
-        const group = groups.find(g => g.id === dr.groupId);
-
-        const undoUpdates = [];
-        const prevFields = {};
-        for (const key of Object.keys(fields)) prevFields[key] = dr[key] ?? '';
-        undoUpdates.push({ drId, prevFields });
-
-        updateDrawing(drId, fields);
-        const newRevIds = [];
-
-        if (fields.reviewDate && !dr.approveDate) {
-            const grpDrawings = drawings.filter(d => d.groupId === dr.groupId);
-            const latest = grpDrawings.sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }))[0];
-            if (latest?.id === drId) {
-                const newId = await addDrawingRevision(dr.groupId, dr.rev);
-                if (newId) newRevIds.push(newId);
-            }
-        }
-
-        if (group?.batchTag) {
-            const siblings = groups.filter(g =>
-                g.batchTag === group.batchTag &&
-                g.projectId === group.projectId &&
-                g.id !== group.id
-            );
-            for (const sg of siblings) {
-                const sgLatest = drawings
-                    .filter(d => d.groupId === sg.id)
-                    .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }))
-                    .at(-1);
-                if (sgLatest && !sgLatest.approveDate) {
-                    const sgPrev = {};
-                    for (const key of Object.keys(fields)) sgPrev[key] = sgLatest[key] ?? '';
-                    undoUpdates.push({ drId: sgLatest.id, prevFields: sgPrev });
-                    updateDrawing(sgLatest.id, fields);
-                    if (fields.reviewDate) {
-                        const newId = await addDrawingRevision(sg.id, sgLatest.rev);
-                        if (newId) newRevIds.push(newId);
-                    }
-                }
-            }
-        }
-
-        setUndoStack(prev => [...prev.slice(-9), { updates: undoUpdates, newRevIds }]);
-    };
-
-    const handleUpdateDrawingSolo = async (drId, fields) => {
-        if (fields.submitDate) fields = { ...fields, plannedSubmit: '' };
-
-        const dr = drawings.find(d => d.id === drId);
-        const prevFields = {};
-        for (const key of Object.keys(fields)) prevFields[key] = dr ? (dr[key] ?? '') : '';
-
-        updateDrawing(drId, fields);
-        const newRevIds = [];
-
-        if (fields.reviewDate && dr && !dr.approveDate) {
-            const grpDrawings = drawings.filter(d => d.groupId === dr.groupId);
-            const latest = grpDrawings.sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }))[0];
-            if (latest?.id === drId) {
-                const newId = await addDrawingRevision(dr.groupId, dr.rev);
-                if (newId) newRevIds.push(newId);
-            }
-        }
-
-        setUndoStack(prev => [...prev.slice(-9), { updates: [{ drId, prevFields }], newRevIds }]);
-    };
-
-    const handleUndo = () => {
-        if (undoStack.length === 0) return;
-        const entry = undoStack[undoStack.length - 1];
-        setUndoStack(prev => prev.slice(0, -1));
-        for (const { drId, prevFields } of entry.updates) {
-            updateDrawing(drId, prevFields);
-        }
-        for (const revId of entry.newRevIds) {
-            deleteDrawing(revId);
-        }
-    };
-
     const handleExport = () => {
         const project = projects.find(p => p.id === activeProjectId);
         const projGroups = groups
@@ -649,19 +583,23 @@ export function FactoryPage() {
         for (const g of projGroups) {
             const gDrawings = drawings
                 .filter(d => d.groupId === g.id)
-                .sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
-            for (const d of gDrawings) {
-                rows.push({
-                    '項次': g.itemNo || '', '工料編號': g.code || '', '項目名稱': g.name,
-                    '品項類型': g.type || '', '批次': g.batchTag || '', '版次': d.rev,
-                    '預計送審': d.plannedSubmit || '', '送審日期': d.submitDate || '',
-                    '回簽日期': d.reviewDate || '', '核准日期': d.approveDate || '',
-                    '狀態': getDrawingStatus(d).label,
-                });
-            }
+                .sort((a, b) => b.rev.localeCompare(a.rev, undefined, { numeric: true }));
+            const latest = gDrawings[0];
+            const getDate = (stepName) =>
+                factorySteps.find(f => f.groupId === g.id && f.stepName === stepName)?.doneDate || '';
+            rows.push({
+                '項次': g.itemNo || '', '工料編號': g.code || '', '項目名稱': g.name,
+                '品項類型': g.type || '', '批次': g.batchTag || '',
+                '核准日期': latest?.approveDate || '',
+                '下料日期': getDate('下料'),
+                [`${machiningStep}日期`]: getDate(machiningStep),
+                '組立日期': getDate('組立'),
+                '烤漆日期': getDate('烤漆'),
+                '送達工地': getDate('送達工地'),
+            });
         }
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [6, 12, 36, 12, 10, 6, 12, 12, 12, 12, 8].map(wch => ({ wch }));
+        ws['!cols'] = [6, 12, 36, 12, 10, 12, 12, 12, 12, 12, 12].map(wch => ({ wch }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, '下料');
         XLSX.writeFile(wb, `下料_${project?.name || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -678,15 +616,6 @@ export function FactoryPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
-            <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-2 overflow-x-auto">
-                {projects.map(p => (
-                    <button key={p.id}
-                        onClick={() => { setActiveProjectId(p.id); setAddingGroup(false); exitSelectMode(); }}
-                        className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-colors ${activeProjectId === p.id ? 'bg-gray-900 text-white font-medium' : 'text-gray-500 hover:bg-gray-100'}`}
-                    >{p.name}</button>
-                ))}
-            </div>
-
             <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <h2 className="text-lg font-bold text-gray-900">下料</h2>
@@ -726,12 +655,6 @@ export function FactoryPage() {
                                 </>
                             ) : (
                                 <>
-                                    <button
-                                        onClick={handleUndo}
-                                        disabled={undoStack.length === 0}
-                                        title="還原上一步"
-                                        className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-30"
-                                    >↩ 還原</button>
                                     <button onClick={handleExport} className="px-4 py-2 text-sm rounded-xl font-medium border bg-white text-gray-700 border-gray-200 hover:bg-gray-50">匯出 Excel</button>
                                     <button
                                         onClick={() => { setSelectMode(true); setShowPanel(false); }}
@@ -755,19 +678,45 @@ export function FactoryPage() {
                     </div>
                 ) : (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-                        <div className={`${GRID} gap-x-1 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 font-medium sticky top-0 border-l-4 border-transparent`}>
-                            <span />
-                            <span>#</span>
-                            <span>工料編號</span>
-                            <span>項目名稱</span>
-                            <span>類型</span>
-                            <span className="text-center">版次</span>
-                            <span>預計送審</span>
-                            <span>送審日期</span>
-                            <span>回簽日期</span>
-                            <span>核准日期</span>
-                            <span className="text-center">狀態</span>
-                            <span />
+                        <div ref={headerRef}
+                             className="gap-x-1 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 font-medium sticky top-0 border-l-4 border-transparent"
+                             style={gridStyle}>
+                            {colOrder.map((origIdx, displayPos) => {
+                                if (displayPos === 0 || displayPos === colOrder.length - 1) return <span key={origIdx} />;
+                                const isDragging = dragInfo?.fromPos === displayPos;
+                                const isTarget = dragInfo && dragInfo.toPos === displayPos && !isDragging;
+                                const isMachining = origIdx === 8;
+                                const label = isMachining ? null : FACTORY_COL_LABELS[origIdx];
+                                const centered = origIdx === 5;
+                                return (
+                                    <div key={origIdx}
+                                         className={`relative flex items-center overflow-visible select-none transition-colors ${isDragging ? 'opacity-30' : ''} ${isTarget ? 'bg-blue-50' : ''}`}
+                                         onMouseDown={e => { if (e.ctrlKey) startColDrag(displayPos, e); }}
+                                         title="Ctrl+拖曳調整欄位順序">
+                                        {isMachining ? (
+                                            <div ref={stepDropdownRef} className="flex items-center">
+                                                <button onClick={() => setShowStepDropdown(v => !v)}
+                                                    className="flex items-center gap-0.5 text-[10px] text-gray-400 font-medium hover:text-gray-600 transition-colors">
+                                                    {machiningStep} <span className="text-[8px]">▾</span>
+                                                </button>
+                                                {showStepDropdown && (
+                                                    <div className="absolute top-full left-0 mt-1 w-28 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 overflow-hidden">
+                                                        {allStepOptions.map(s => (
+                                                            <button key={s} onClick={() => { setMachiningStep(s); setShowStepDropdown(false); }}
+                                                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${s === machiningStep ? 'text-indigo-600 font-medium' : 'text-gray-700'}`}
+                                                            >{s}</button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className={centered ? 'w-full text-center' : ''}>{label}</span>
+                                        )}
+                                        <div onMouseDown={e => { e.stopPropagation(); if (!e.ctrlKey) startResize(origIdx, e); }}
+                                             className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-gray-200/60 hover:bg-blue-400/60 transition-colors z-10" />
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {orderedGroups.map(({ g, depth }) => {
@@ -782,8 +731,6 @@ export function FactoryPage() {
                                         isCollapsed={collapsedGroups.has(g.id)}
                                         onToggleCollapse={() => toggleCollapse(g.id)}
                                         allDr={drawings.filter(d => d.groupId === g.id)}
-                                        onUpdate={handleUpdateDrawing}
-                                        onUpdateSolo={handleUpdateDrawingSolo}
                                         onDeleteGroup={deleteGroup}
                                         onUpdateGroup={updateGroup}
                                         isAdmin={isAdmin}
@@ -791,6 +738,11 @@ export function FactoryPage() {
                                         selected={selectedIds.has(g.id)}
                                         onToggleSelect={() => toggleSelect(g.id)}
                                         onOpenDetail={() => setDetailGroupId(g.id)}
+                                        factorySteps={factorySteps}
+                                        onSetStepDate={upsertFactoryStepDate}
+                                        machiningStep={machiningStep}
+                                        gridStyle={gridStyle}
+                                        colPos={colPos}
                                     />
                                 </Fragment>
                             );

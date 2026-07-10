@@ -350,7 +350,7 @@ export default function App() {
                         </button>
                     ))}
                     <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-3">
-                        {selectedProjectName && (
+                        {selectedProjectName && activeSection !== 'settings' && (
                             <span className="hidden sm:inline-flex px-3 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
                                 {selectedProjectName}
                             </span>
@@ -359,7 +359,7 @@ export default function App() {
                         <button onClick={logout} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">登出</button>
                     </div>
                 </div>
-                {selectedProjectName && (
+                {selectedProjectName && activeSection !== 'settings' && (
                     <div className="sm:hidden bg-gray-50 border-t border-gray-100 px-4 py-1.5 text-xs text-gray-500 text-center">
                         目前工地：<span className="font-medium text-gray-700">{selectedProjectName}</span>
                     </div>

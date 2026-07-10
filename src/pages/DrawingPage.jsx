@@ -11,7 +11,7 @@ function useAllItemTypes() {
     } catch { return ITEM_TYPES; }
 }
 
-const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu }, ref) {
+const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu, style }, ref) {
     const [editing, setEditing] = useState(false);
     const inputRef = useRef(null);
 
@@ -27,6 +27,7 @@ const DateInput = forwardRef(function DateInput({ value, onChange, onContextMenu
 
     return (
         <div className="relative min-h-[1.1rem]"
+             style={style}
              onDoubleClick={() => setEditing(true)}
              onContextMenu={onContextMenu}>
             <input
@@ -69,8 +70,9 @@ function batchBgColor(tag) {
 // 子項目專用類型
 const SUB_ITEM_TYPES = ['預埋件', '內套筒', '補料'];
 
-// grid template 共用
-const GRID = 'grid grid-cols-[1.5rem_2.5rem_6rem_1fr_5rem_3.5rem_6.5rem_6.5rem_6.5rem_6.5rem_4.5rem_2rem]';
+// 欄寬預設值（px）：toggle / # / 工料編號 / 項目名稱 / 類型 / 版次 / 預計送審 / 送審日期 / 回簽日期 / 核准日期 / 狀態 / delete
+const DRAWING_DEFAULT_WIDTHS = [24, 40, 80, 200, 80, 56, 104, 104, 104, 104, 72, 32];
+const DRAWING_COL_LABELS = ['', '#', '工料編號', '項目名稱', '類型', '版次', '預計送審', '送審日期', '回簽日期', '核准日期', '狀態', ''];
 
 // ── 側邊群組管理面板 ─────────────────────────────────────────────
 function GroupManagementPanel({ open, onClose, batches, activeGroups, drawings, onRemoveFromBatch, onCreateBatch }) {
@@ -190,7 +192,7 @@ function GroupManagementPanel({ open, onClose, batches, activeGroups, drawings, 
 }
 
 // ── GroupRow ─────────────────────────────────────────────────────
-function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdateGroup, isAdmin, selectMode, selected, onToggleSelect, onOpenDetail, onAddSubItem, depth = 0, hasChildren = false, isCollapsed = false, onToggleCollapse }) {
+function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdateGroup, isAdmin, selectMode, selected, onToggleSelect, onOpenDetail, onAddSubItem, depth = 0, hasChildren = false, isCollapsed = false, onToggleCollapse, gridStyle, colPos }) {
     const [editingType, setEditingType] = useState(false);
     const [typeValue, setTypeValue] = useState(group.type || '');
     const [ctxMenu, setCtxMenu] = useState(null); // { x, y, field }
@@ -208,6 +210,7 @@ function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdat
 
     const sorted = [...allDr].sort((a, b) => a.rev.localeCompare(b.rev, undefined, { numeric: true }));
     const latest = sorted[sorted.length - 1];
+    const isApproved = !!latest?.approveDate;
     const status = getDrawingStatus(latest);
     const borderColor = batchBorderColor(group.batchTag);
     const bgColor = group.batchTag ? batchBgColor(group.batchTag) : '';
@@ -272,27 +275,27 @@ function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdat
         <>
             {/* 主列 */}
             <div
-                className={`${GRID} gap-x-1 items-center px-2 py-2 border-b border-gray-100 text-xs transition-colors border-l-4 ${borderColor} ${bgColor || 'bg-white'} hover:brightness-95 ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selected ? 'ring-1 ring-inset ring-indigo-300' : ''}`}
+                className={`gap-x-1 items-center px-2 py-2 border-b border-gray-100 text-xs transition-colors border-l-4 ${borderColor} ${isApproved ? 'bg-gray-50 opacity-60' : (bgColor || 'bg-white')} hover:brightness-95 ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selected ? 'ring-1 ring-inset ring-indigo-300' : ''}`}
+                style={gridStyle}
                 onClick={() => selectMode && onToggleSelect()}
             >
-                {/* 第一欄：選取模式 = checkbox，否則空白 */}
                 {selectMode ? (
-                    <div
+                    <div style={{ order: colPos[0] }}
                         onClick={e => { e.stopPropagation(); onToggleSelect(); }}
                         className={`w-4 h-4 rounded border-2 flex items-center justify-center mx-auto cursor-pointer transition-colors ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 hover:border-indigo-400'}`}
                     >
                         {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
                     </div>
                 ) : hasChildren ? (
-                    <button
+                    <button style={{ order: colPos[0] }}
                         onClick={e => { e.stopPropagation(); onToggleCollapse(); }}
                         className="text-gray-400 text-[10px] flex items-center justify-center hover:text-gray-600 cursor-pointer"
                     >{isCollapsed ? '▶' : '▼'}</button>
-                ) : <span />}
+                ) : <span style={{ order: colPos[0] }} />}
 
-                <span className="text-gray-400 font-mono truncate">{group.itemNo || ''}</span>
-                <span className="text-gray-400 font-mono truncate">{group.code || ''}</span>
-                <span
+                <span style={{ order: colPos[1] }} className="text-gray-400 font-mono truncate">{group.itemNo || ''}</span>
+                <span style={{ order: colPos[2] }} className="text-gray-400 font-mono truncate">{group.code || ''}</span>
+                <span style={{ order: colPos[3] }}
                     className="font-medium text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-0.5"
                     title="雙擊查看詳細資訊，右鍵更多選項"
                     onDoubleClick={e => { e.stopPropagation(); onOpenDetail(); }}
@@ -302,70 +305,64 @@ function GroupRow({ group, allDr, onUpdate, onUpdateSolo, onDeleteGroup, onUpdat
                     <span className="truncate">{group.name}</span>
                 </span>
 
-                {/* 類型 */}
                 {editingType ? (
-                    <input
-                        autoFocus
-                        value={typeValue}
+                    <input style={{ order: colPos[4] }}
+                        autoFocus value={typeValue}
                         onChange={e => setTypeValue(e.target.value)}
                         onBlur={handleTypeBlur}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') handleTypeBlur();
-                            if (e.key === 'Escape') setEditingType(false);
-                        }}
+                        onKeyDown={e => { if (e.key === 'Enter') handleTypeBlur(); if (e.key === 'Escape') setEditingType(false); }}
                         onClick={e => e.stopPropagation()}
                         className="text-xs px-1 py-0.5 bg-gray-100 rounded border border-gray-300 outline-none w-full"
                     />
                 ) : (
-                    <span
+                    <span style={{ order: colPos[4] }}
                         onClick={e => { e.stopPropagation(); if (!selectMode) { setTypeValue(group.type || ''); setEditingType(true); } }}
                         className="text-xs px-1.5 py-0.5 bg-white/70 text-gray-500 rounded cursor-pointer hover:bg-white truncate"
                         title="點擊編輯類型"
                     >{group.type || '未分類'}</span>
                 )}
 
-                <span className="text-gray-500 font-mono text-center">{latest?.rev || '—'}</span>
+                <span style={{ order: colPos[5] }} className="text-gray-500 font-mono text-center">{latest?.rev || '—'}</span>
 
                 {latest ? (() => {
-                    const isApproved = !!latest.approveDate;
                     const approveOnly = !!group.parentId;
                     return (
                         <>
                             {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.plannedSubmit || '——')}</span>
-                                : <DateInput ref={dateRefs.plannedSubmit} value={latest.plannedSubmit}
+                                ? <span style={{ order: colPos[6] }} className="text-xs text-gray-300 select-none">{!approveOnly && (latest.plannedSubmit || '——')}</span>
+                                : <DateInput style={{ order: colPos[6] }} ref={dateRefs.plannedSubmit} value={latest.plannedSubmit}
                                     onChange={makeOnChange('plannedSubmit', latest.id)}
                                     onContextMenu={(e) => handleDateRightClick(e, 'plannedSubmit')} />
                             }
                             {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.submitDate || '——')}</span>
-                                : <DateInput ref={dateRefs.submitDate} value={latest.submitDate}
+                                ? <span style={{ order: colPos[7] }} className="text-xs text-gray-300 select-none">{!approveOnly && (latest.submitDate || '——')}</span>
+                                : <DateInput style={{ order: colPos[7] }} ref={dateRefs.submitDate} value={latest.submitDate}
                                     onChange={makeOnChange('submitDate', latest.id)}
                                     onContextMenu={(e) => handleDateRightClick(e, 'submitDate')} />
                             }
                             {approveOnly || isApproved
-                                ? <span className="text-xs text-gray-300 select-none">{!approveOnly && (latest.reviewDate || '——')}</span>
-                                : <DateInput ref={dateRefs.reviewDate} value={latest.reviewDate}
+                                ? <span style={{ order: colPos[8] }} className="text-xs text-gray-300 select-none">{!approveOnly && (latest.reviewDate || '——')}</span>
+                                : <DateInput style={{ order: colPos[8] }} ref={dateRefs.reviewDate} value={latest.reviewDate}
                                     onChange={makeOnChange('reviewDate', latest.id)}
                                     onContextMenu={(e) => handleDateRightClick(e, 'reviewDate')} />
                             }
-                            <DateInput ref={dateRefs.approveDate} value={latest.approveDate}
+                            <DateInput style={{ order: colPos[9] }} ref={dateRefs.approveDate} value={latest.approveDate}
                                 onChange={makeOnChange('approveDate', latest.id)}
                                 onContextMenu={(e) => handleDateRightClick(e, 'approveDate')} />
                         </>
                     );
                 })() : (
-                    <><span/><span/><span/><span/></>
+                    <><span style={{ order: colPos[6] }}/><span style={{ order: colPos[7] }}/><span style={{ order: colPos[8] }}/><span style={{ order: colPos[9] }}/></>
                 )}
 
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap text-center ${status.cls}`}>{status.label}</span>
+                <span style={{ order: colPos[10] }} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap text-center ${status.cls}`}>{status.label}</span>
 
                 {isAdmin ? (
-                    <button
+                    <button style={{ order: colPos[11] }}
                         onClick={e => { e.stopPropagation(); if (window.confirm(`刪除「${group.name}」？`)) onDeleteGroup(group.id); }}
                         className="text-gray-200 hover:text-red-400 transition-colors text-center"
                     >✕</button>
-                ) : <span />}
+                ) : <span style={{ order: colPos[11] }} />}
             </div>
 
             {/* 右鍵選單：單獨修改日期 */}
@@ -545,8 +542,7 @@ export function DrawingPage() {
     const isAdmin = user?.role === 'admin';
     const allTypes = useAllItemTypes();
 
-    const [activeProjectId, setActiveProjectId] = useState(selectedProjectId);
-    useEffect(() => { if (selectedProjectId) setActiveProjectId(selectedProjectId); }, [selectedProjectId]);
+    const activeProjectId = selectedProjectId;
     const [addingGroup, setAddingGroup] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupType, setNewGroupType] = useState(allTypes[0]);
@@ -562,6 +558,88 @@ export function DrawingPage() {
 
     // 還原堆疊
     const [undoStack, setUndoStack] = useState([]);
+
+    // 欄寬調整
+    const [colWidths, setColWidths] = useState(() => {
+        try {
+            const s = localStorage.getItem('pw_col_widths_drawing');
+            if (s) { const a = JSON.parse(s); if (a.length === DRAWING_DEFAULT_WIDTHS.length) return a; }
+        } catch {}
+        return DRAWING_DEFAULT_WIDTHS;
+    });
+    const [colOrder, setColOrder] = useState(() => {
+        try {
+            const s = localStorage.getItem('pw_col_order_drawing');
+            if (s) { const a = JSON.parse(s); if (a.length === DRAWING_DEFAULT_WIDTHS.length && a[0] === 0 && a[a.length - 1] === a.length - 1) return a; }
+        } catch {}
+        return DRAWING_DEFAULT_WIDTHS.map((_, i) => i);
+    });
+    const colPos = Object.fromEntries(colOrder.map((origIdx, displayPos) => [origIdx, displayPos]));
+    const [dragInfo, setDragInfo] = useState(null);
+    const headerRef = useRef(null);
+    const gridStyle = { display: 'grid', gridTemplateColumns: colOrder.map(i => colWidths[i] + 'px').join(' ') };
+    const startResize = (colIdx, e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = colWidths[colIdx];
+        const onMove = (me) => {
+            const newW = Math.max(32, startW + me.clientX - startX);
+            setColWidths(prev => {
+                const next = [...prev]; next[colIdx] = newW;
+                try { localStorage.setItem('pw_col_widths_drawing', JSON.stringify(next)); } catch {}
+                return next;
+            });
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+    const startColDrag = (fromDisplayPos, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+        setDragInfo({ fromPos: fromDisplayPos, toPos: fromDisplayPos });
+        const getDropPos = (mouseX) => {
+            if (!headerRef.current) return fromDisplayPos;
+            const { left } = headerRef.current.getBoundingClientRect();
+            const x = mouseX - left;
+            let cumW = 0;
+            for (let i = 0; i < colOrder.length; i++) {
+                const w = colWidths[colOrder[i]];
+                if (x < cumW + w / 2) return Math.max(1, Math.min(colOrder.length - 2, i));
+                cumW += w;
+            }
+            return colOrder.length - 2;
+        };
+        const onMove = (me) => setDragInfo(prev => prev ? { ...prev, toPos: getDropPos(me.clientX) } : null);
+        const onUp = (me) => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            const toPos = getDropPos(me.clientX);
+            setDragInfo(null);
+            if (toPos !== fromDisplayPos) {
+                setColOrder(prev => {
+                    const next = [...prev];
+                    const [moved] = next.splice(fromDisplayPos, 1);
+                    next.splice(toPos, 0, moved);
+                    try { localStorage.setItem('pw_col_order_drawing', JSON.stringify(next)); } catch {}
+                    return next;
+                });
+            }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
 
     // 詳細資訊 Modal
     const [detailGroupId, setDetailGroupId] = useState(null);
@@ -775,16 +853,6 @@ export function DrawingPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
-            {/* 工地 tabs */}
-            <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-2 overflow-x-auto">
-                {projects.map(p => (
-                    <button key={p.id}
-                        onClick={() => { setActiveProjectId(p.id); setAddingGroup(false); exitSelectMode(); }}
-                        className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-colors ${activeProjectId === p.id ? 'bg-gray-900 text-white font-medium' : 'text-gray-500 hover:bg-gray-100'}`}
-                    >{p.name}</button>
-                ))}
-            </div>
-
             <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
                 {/* 標題列 */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -883,19 +951,26 @@ export function DrawingPage() {
                 ) : (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
                         {/* 表頭 */}
-                        <div className={`${GRID} gap-x-1 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 font-medium sticky top-0 border-l-4 border-transparent`}>
-                            <span />
-                            <span>#</span>
-                            <span>工料編號</span>
-                            <span>項目名稱</span>
-                            <span>類型</span>
-                            <span className="text-center">版次</span>
-                            <span>預計送審</span>
-                            <span>送審日期</span>
-                            <span>回簽日期</span>
-                            <span>核准日期</span>
-                            <span className="text-center">狀態</span>
-                            <span />
+                        <div ref={headerRef}
+                             className="gap-x-1 px-2 py-2 bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 font-medium sticky top-0 border-l-4 border-transparent"
+                             style={gridStyle}>
+                            {colOrder.map((origIdx, displayPos) => {
+                                if (displayPos === 0 || displayPos === colOrder.length - 1) return <span key={origIdx} />;
+                                const label = DRAWING_COL_LABELS[origIdx];
+                                const isDragging = dragInfo?.fromPos === displayPos;
+                                const isTarget = dragInfo && dragInfo.toPos === displayPos && !isDragging;
+                                const centered = origIdx === 5 || origIdx === 10;
+                                return (
+                                    <div key={origIdx}
+                                         className={`relative flex items-center overflow-visible select-none transition-colors ${isDragging ? 'opacity-30' : ''} ${isTarget ? 'bg-blue-50' : ''}`}
+                                         onMouseDown={e => { if (e.ctrlKey) startColDrag(displayPos, e); }}
+                                         title="Ctrl+拖曳調整欄位順序">
+                                        <span className={centered ? 'w-full text-center' : ''}>{label}</span>
+                                        <div onMouseDown={e => { e.stopPropagation(); if (!e.ctrlKey) startResize(origIdx, e); }}
+                                             className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-gray-200/60 hover:bg-blue-400/60 transition-colors z-10" />
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {/* 資料列 */}
@@ -921,28 +996,34 @@ export function DrawingPage() {
                                     onToggleSelect={() => toggleSelect(g.id)}
                                     onOpenDetail={() => setDetailGroupId(g.id)}
                                     onAddSubItem={() => handleAddSubItem(g.id)}
+                                    gridStyle={gridStyle}
+                                    colPos={colPos}
                                 />
                                 {addingSubItem === g.id && (
-                                    <div className={`${GRID} gap-x-1 items-center px-2 py-1.5 bg-blue-50 border-b border-blue-100 border-l-4 border-l-blue-300`}>
-                                        <span /><span /><span />
-                                        <input
-                                            autoFocus
-                                            type="text"
-                                            placeholder="子項目名稱"
-                                            value={newSubName}
-                                            onChange={e => setNewSubName(e.target.value)}
+                                    <div className="gap-x-1 items-center px-2 py-1.5 bg-blue-50 border-b border-blue-100 border-l-4 border-l-blue-300" style={gridStyle}>
+                                        <span style={{ order: colPos[0] }} />
+                                        <span style={{ order: colPos[1] }} />
+                                        <span style={{ order: colPos[2] }} />
+                                        <input style={{ order: colPos[3] }}
+                                            autoFocus type="text" placeholder="子項目名稱"
+                                            value={newSubName} onChange={e => setNewSubName(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter') handleConfirmSubItem(); if (e.key === 'Escape') setAddingSubItem(null); }}
                                             className="text-xs px-2 py-1 border border-blue-300 rounded outline-none bg-white w-full"
                                         />
-                                        <select value={newSubType} onChange={e => setNewSubType(e.target.value)}
+                                        <select style={{ order: colPos[4] }} value={newSubType} onChange={e => setNewSubType(e.target.value)}
                                             className="text-xs px-1 py-1 border border-gray-200 rounded outline-none bg-white w-full">
                                             {SUB_ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                         </select>
-                                        <span /><span /><span /><span /><span />
-                                        <div className="flex gap-1">
+                                        <span style={{ order: colPos[5] }} />
+                                        <span style={{ order: colPos[6] }} />
+                                        <span style={{ order: colPos[7] }} />
+                                        <span style={{ order: colPos[8] }} />
+                                        <span style={{ order: colPos[9] }} />
+                                        <div style={{ order: colPos[10] }} className="flex gap-1">
                                             <button onClick={handleConfirmSubItem} className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded">新增</button>
                                             <button onClick={() => setAddingSubItem(null)} className="text-xs px-2 py-0.5 text-gray-500 hover:bg-gray-100 rounded">取消</button>
                                         </div>
+                                        <span style={{ order: colPos[11] }} />
                                     </div>
                                 )}
                             </Fragment>
