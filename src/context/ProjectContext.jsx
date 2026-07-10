@@ -51,6 +51,14 @@ export function ProjectProvider({ children }) {
     const [hasCachedData]                 = useState(!!cached);
     const [loading, setLoading]           = useState(true);
     const [dbError, setDbError]           = useState(null);
+    const [selectedProjectId, setSelectedProjectIdState] = useState(
+        () => localStorage.getItem('prowork_selected_project') || null
+    );
+
+    const setSelectedProjectId = (id) => {
+        localStorage.setItem('prowork_selected_project', id || '');
+        setSelectedProjectIdState(id);
+    };
 
     useEffect(() => {
         api.get('/init')
@@ -167,6 +175,7 @@ export function ProjectProvider({ children }) {
     const value = {
         projects, groups, drawings, factorySteps,
         loading, dbError, hasCachedData,
+        selectedProjectId, setSelectedProjectId,
         addProject, updateProject, deleteProject,
         addGroup, updateGroup, deleteGroup,
         addDrawingRevision, updateDrawing, deleteDrawing,

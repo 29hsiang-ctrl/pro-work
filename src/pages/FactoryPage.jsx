@@ -475,11 +475,12 @@ function DetailModal({ group, drawings, onClose, onUpdate }) {
 
 // ── FactoryPage ───────────────────────────────────────────────────
 export function FactoryPage() {
-    const { projects, groups, drawings, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing } = useProject();
+    const { projects, groups, drawings, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing, selectedProjectId } = useProject();
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
 
-    const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id ?? null);
+    const [activeProjectId, setActiveProjectId] = useState(selectedProjectId);
+    useEffect(() => { if (selectedProjectId) setActiveProjectId(selectedProjectId); }, [selectedProjectId]);
 
     const [selectMode, setSelectMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());

@@ -8,7 +8,9 @@ export const handler = async (event) => {
 
         switch (event.httpMethod) {
             case 'GET': {
-                const entries = await col.find({}).sort({ createdAt: 1 }).toArray();
+                const projectId = event.queryStringParameters?.projectId;
+                const query = projectId ? { projectId } : {};
+                const entries = await col.find(query).sort({ createdAt: 1 }).toArray();
                 return ok(entries.map(({ _id, ...r }) => ({ id: _id, ...r })));
             }
             case 'POST': {

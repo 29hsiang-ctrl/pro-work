@@ -540,12 +540,13 @@ function DetailModal({ group, drawings, onClose, onUpdate }) {
 
 // ── DrawingPage ───────────────────────────────────────────────────
 export function DrawingPage() {
-    const { projects, groups, drawings, addGroup, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing } = useProject();
+    const { projects, groups, drawings, addGroup, updateGroup, deleteGroup, addDrawingRevision, updateDrawing, deleteDrawing, selectedProjectId } = useProject();
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
     const allTypes = useAllItemTypes();
 
-    const [activeProjectId, setActiveProjectId] = useState(projects[0]?.id ?? null);
+    const [activeProjectId, setActiveProjectId] = useState(selectedProjectId);
+    useEffect(() => { if (selectedProjectId) setActiveProjectId(selectedProjectId); }, [selectedProjectId]);
     const [addingGroup, setAddingGroup] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupType, setNewGroupType] = useState(allTypes[0]);

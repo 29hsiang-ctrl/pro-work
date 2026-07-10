@@ -219,10 +219,16 @@ const STEP_POOL = ['折板', '叫管料', '抽料', '加工', '組立', '烤漆'
 function StepsTab({ settings, setSettings }) {
     const customSteps = settings.customSteps || {};
     const customTypes = settings.customTypes || [];
-    const allTypes = [...ITEM_TYPES, ...customTypes];
+    const customStepPool = settings.customStepPool || [];
+    const hiddenBuiltinTypes = settings.hiddenBuiltinTypes || [];
+    const visibleBuiltinTypes = ITEM_TYPES.filter(t => !hiddenBuiltinTypes.includes(t));
+    const allTypes = [...visibleBuiltinTypes, ...customTypes];
+    const allStepPool = [...STEP_POOL, ...customStepPool];
 
     const [addingType, setAddingType] = useState(false);
     const [newTypeName, setNewTypeName] = useState('');
+    const [addingStep, setAddingStep] = useState(false);
+    const [newStepName, setNewStepName] = useState('');
 
     const getSteps = (type) =>
         customSteps[type] ?? FACTORY_STEPS_BY_TYPE[type] ?? [];
@@ -231,7 +237,7 @@ function StepsTab({ settings, setSettings }) {
         const current = getSteps(type);
         const next = current.includes(step)
             ? current.filter(s => s !== step)
-            : [...current, step].sort((a, b) => STEP_POOL.indexOf(a) - STEP_POOL.indexOf(b));
+            : [...current, step].sort((a, b) => allStepPool.indexOf(a) - allStepPool.indexOf(b));
         setSettings(s => ({ ...s, customSteps: { ...(s.customSteps || {}), [type]: next } }));
     };
 
@@ -249,15 +255,81 @@ function StepsTab({ settings, setSettings }) {
 
     const deleteType = (type) => {
         if (!window.confirm(`確認刪除品項「${type}」？`)) return;
+        const isCustom = customTypes.includes(type);
+        if (isCustom) {
+            setSettings(s => ({
+                ...s,
+                customTypes: (s.customTypes || []).filter(t => t !== type),
+                customSteps: Object.fromEntries(Object.entries(s.customSteps || {}).filter(([k]) => k !== type)),
+            }));
+        } else {
+            setSettings(s => ({
+                ...s,
+                hiddenBuiltinTypes: [...(s.hiddenBuiltinTypes || []), type],
+                customSteps: Object.fromEntries(Object.entries(s.customSteps || {}).filter(([k]) => k !== type)),
+            }));
+        }
+    };
+
+    const addStep = () => {
+        const name = newStepName.trim();
+        if (!name || allStepPool.includes(name)) return;
+        setSettings(s => ({ ...s, customStepPool: [...(s.customStepPool || []), name] }));
+        setNewStepName('');
+        setAddingStep(false);
+    };
+
+    const deleteStep = (step) => {
+        if (!window.confirm(`確認刪除步驟「${step}」？此步驟將從所有品項中移除。`)) return;
         setSettings(s => ({
             ...s,
-            customTypes: (s.customTypes || []).filter(t => t !== type),
-            customSteps: Object.fromEntries(Object.entries(s.customSteps || {}).filter(([k]) => k !== type)),
+            customStepPool: (s.customStepPool || []).filter(st => st !== step),
+            customSteps: Object.fromEntries(
+                Object.entries(s.customSteps || {}).map(([type, steps]) => [type, steps.filter(st => st !== step)])
+            ),
         }));
     };
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+            {/* 步驟庫管理 */}
+            <div className="bg-white rounded-xl border border-gray-100 px-4 py-4 space-y-3">
+                <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-800">步驟庫</p>
+                    <button
+                        onClick={() => setAddingStep(true)}
+                        className="flex-shrink-0 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg font-medium hover:bg-gray-700 transition-colors"
+                    >+ 新增步驟</button>
+                </div>
+                {addingStep && (
+                    <div className="flex gap-2">
+                        <input
+                            autoFocus
+                            type="text"
+                            placeholder="步驟名稱（例：打磨）"
+                            value={newStepName}
+                            onChange={e => setNewStepName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') addStep(); if (e.key === 'Escape') { setAddingStep(false); setNewStepName(''); } }}
+                            className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white"
+                        />
+                        <button onClick={addStep} className="px-3 py-2 bg-gray-900 text-white text-sm rounded-lg">新增</button>
+                        <button onClick={() => { setAddingStep(false); setNewStepName(''); }} className="px-3 py-2 text-sm text-gray-400 hover:bg-gray-100 rounded-lg">取消</button>
+                    </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                    {STEP_POOL.map(step => (
+                        <span key={step} className="px-3 py-1 text-xs rounded-full bg-gray-100 text-gray-500 font-medium">{step}</span>
+                    ))}
+                    {customStepPool.map(step => (
+                        <span key={step} className="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full bg-blue-50 text-blue-600 font-medium">
+                            {step}
+                            <button onClick={() => deleteStep(step)} className="text-blue-300 hover:text-red-400 transition-colors leading-none">✕</button>
+                        </span>
+                    ))}
+                </div>
+            </div>
+
+            {/* 品項類型列表 */}
             <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-500">點選步驟開啟／關閉，設定各品項類型的預設工廠步驟。</p>
                 <button
@@ -266,7 +338,6 @@ function StepsTab({ settings, setSettings }) {
                 >+ 新增品項</button>
             </div>
 
-            {/* 新增品項表單 */}
             {addingType && (
                 <div className="flex gap-2">
                     <input
@@ -296,13 +367,11 @@ function StepsTab({ settings, setSettings }) {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <button onClick={() => resetType(type)} className="text-xs text-gray-400 hover:text-red-500 transition-colors">重置</button>
-                                    {isCustomType && (
-                                        <button onClick={() => deleteType(type)} className="text-xs text-red-400 hover:text-red-600 transition-colors">刪除</button>
-                                    )}
+                                    <button onClick={() => deleteType(type)} className="text-xs text-red-400 hover:text-red-600 transition-colors">刪除</button>
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {STEP_POOL.map(step => {
+                                {allStepPool.map(step => {
                                     const on = activeSteps.includes(step);
                                     return (
                                         <button

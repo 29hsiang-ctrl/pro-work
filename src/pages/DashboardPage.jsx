@@ -2,7 +2,7 @@ import { useProject, getDrawingStatus } from '../context/ProjectContext';
 import { useSettings } from '../context/SettingsContext';
 
 export function DashboardPage() {
-    const { projects, groups, drawings, factorySteps } = useProject();
+    const { projects, groups, drawings, factorySteps, selectedProjectId, setSelectedProjectId } = useProject();
     const { settings } = useSettings();
     const allUsers = settings.users || [];
 
@@ -49,7 +49,14 @@ export function DashboardPage() {
             <div className="max-w-5xl mx-auto space-y-8">
 
                 {/* 標題 */}
-                <h2 className="text-xl font-bold text-gray-900">首頁總覽</h2>
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-gray-900">首頁總覽</h2>
+                    <span className="text-sm text-gray-500">
+                        {selectedProjectId
+                            ? `目前工地：${projects.find(p => p.id === selectedProjectId)?.name ?? ''}`
+                            : '尚未選擇工地'}
+                    </span>
+                </div>
 
                 {/* 統計卡片 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -75,9 +82,16 @@ export function DashboardPage() {
                 ) : (
                     <div className="space-y-3">
                         {projectSummary.map(p => (
-                            <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                            <div
+                                key={p.id}
+                                onClick={() => setSelectedProjectId(p.id === selectedProjectId ? null : p.id)}
+                                className={`bg-white rounded-2xl border shadow-sm overflow-hidden cursor-pointer transition-all ${p.id === selectedProjectId ? 'border-gray-800 ring-2 ring-gray-800' : 'border-gray-100'}`}
+                            >
                                 <div className="p-5">
-                                    <h3 className="font-bold text-base text-gray-900">{p.name}</h3>
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-bold text-base text-gray-900">{p.name}</h3>
+                                        {p.id === selectedProjectId && <span className="text-xs font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-full">目前選擇</span>}
+                                    </div>
                                     {p.address && <p className="text-xs text-gray-400 mt-0.5">{p.address}</p>}
                                     {memberNames(p.members).length > 0 && (
                                         <div className="flex flex-wrap gap-1.5 mt-2">

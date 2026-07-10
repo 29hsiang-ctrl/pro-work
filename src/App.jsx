@@ -40,23 +40,30 @@ const VIEW_MENU = [
 export default function App() {
     const { user, logout } = useAuth();
     const { canAccess } = usePermission();
-    const { loading: dbLoading, dbError, hasCachedData } = useProject();
+    const { loading: dbLoading, dbError, hasCachedData, selectedProjectId, projects } = useProject();
+    const selectedProjectName = projects.find(p => p.id === selectedProjectId)?.name;
+    const siteKey = `site_report_data_${selectedProjectId || 'default'}`;
+    const calendarCacheKey = `prowork_calendar_cache_${selectedProjectId || 'none'}`;
     const [mainSection, setMainSection] = useState('dashboard');
     const [view, setView] = useState('photo');
     const [menuOpen, setMenuOpen] = useState(false);
     const [calendarJumpDate, setCalendarJumpDate] = useState(null);
+    const defaultEntry = () => ({ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] });
     const [entries, setEntries] = useState(() => {
         try {
-            const saved = localStorage.getItem('site_report_data');
-            return saved ? JSON.parse(saved).map(e => ({...e, images: e.images || []})) : [{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }];
+            const pid = localStorage.getItem('prowork_selected_project') || 'default';
+            const newKey = `site_report_data_${pid}`;
+            const raw = localStorage.getItem(newKey) ?? localStorage.getItem('site_report_data');
+            return raw ? JSON.parse(raw).map(e => ({...e, images: e.images || []})) : [defaultEntry()];
         } catch {
-            return [{ id: Date.now(), date: getROCDate(), floor: '', direction: '', item: '', content: '', images: [] }];
+            return [defaultEntry()];
         }
     });
     const [reportTitle, setReportTitle] = useState(() => localStorage.getItem('site_report_title') || '施工照片');
     const [calendarEntries, setCalendarEntries] = useState(() => {
         try {
-            const raw = localStorage.getItem('prowork_calendar_cache');
+            const pid = localStorage.getItem('prowork_selected_project') || 'none';
+            const raw = localStorage.getItem(`prowork_calendar_cache_${pid}`);
             return raw ? JSON.parse(raw) : [];
         } catch { return []; }
     });
@@ -67,24 +74,44 @@ export default function App() {
 
     useEffect(() => { document.title = "PRO-WORK"; document.getElementById('loading-splash')?.remove(); }, []);
 
-    // --- [修正] 防止暫存爆掉 ---
+    // 切換工地時重新載入 site entries（在 save effect 之前定義，React 會先執行）
     useEffect(() => {
         try {
-            localStorage.setItem('site_report_data', JSON.stringify(entries));
+            const raw = localStorage.getItem(siteKey) ?? localStorage.getItem('site_report_data');
+            setEntries(raw ? JSON.parse(raw).map(e => ({...e, images: e.images || []})) : [defaultEntry()]);
+            setReportTitle(localStorage.getItem('site_report_title') || '施工照片');
+        } catch { setEntries([defaultEntry()]); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProjectId]);
+
+    // 防止暫存爆掉，hq 不存 localStorage
+    useEffect(() => {
+        try {
+            const toSave = entries.map(e => ({ ...e, images: (e.images || []).map(({ hq, ...img }) => img) }));
+            localStorage.setItem(siteKey, JSON.stringify(toSave));
             localStorage.setItem('site_report_title', reportTitle);
         } catch { console.warn("暫存已滿"); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entries, reportTitle]);
 
     const fetchCalendarEntries = () => {
-        fetch('/api/calendar').then(r => r.json()).then(data => {
-            if (Array.isArray(data)) {
-                setCalendarEntries(data);
-                localStorage.setItem('prowork_calendar_cache', JSON.stringify(data));
-            }
-        }).catch(() => {});
+        if (!selectedProjectId) { setCalendarEntries([]); return; }
+        fetch(`/api/calendar?projectId=${encodeURIComponent(selectedProjectId)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setCalendarEntries(data);
+                    localStorage.setItem(calendarCacheKey, JSON.stringify(data));
+                }
+            }).catch(() => {});
     };
 
-    useEffect(() => { fetchCalendarEntries(); }, []);
+    useEffect(() => {
+        const raw = localStorage.getItem(calendarCacheKey);
+        setCalendarEntries(raw ? JSON.parse(raw) : []);
+        fetchCalendarEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProjectId]);
 
     useEffect(() => {
         if (mainSection === 'calendar' || (mainSection === 'site' && view === 'calendar')) {
@@ -100,13 +127,17 @@ export default function App() {
     const saveToCalendar = async () => {
         const existingIds = new Set(calendarEntries.map(e => e.id));
         const toAdd = entries.filter(e => !existingIds.has(e.id));
-        if (toAdd.length === 0) return;
+        if (toAdd.length === 0) {
+            setSavedMsg(true);
+            setTimeout(() => setSavedMsg(false), 1500);
+            return;
+        }
         const processed = await Promise.all(toAdd.map(async entry => {
             const watermarkText = [entry.date, entry.floor, entry.direction, entry.item, entry.content].filter(Boolean).join('-');
             const images = await Promise.all(
-                (entry.images || []).map(async img => ({ ...img, preview: await applyWatermark(img.preview, watermarkText) }))
+                (entry.images || []).map(async img => ({ ...img, preview: await applyWatermark(img.hq || img.preview, watermarkText) }))
             );
-            return { ...entry, images };
+            return { ...entry, images, projectId: selectedProjectId };
         }));
         setCalendarEntries(prev => [...prev, ...processed]);
         for (const entry of processed) {
@@ -130,7 +161,11 @@ export default function App() {
             if (remainingSlots <= 0) return;
             const processed = [];
             for(let file of files.slice(0, remainingSlots)) {
-                try { const preview = await compressImage(file, 600, 0.4); processed.push({ preview }); } catch (err) { console.error(err); }
+                try {
+                    const preview = await compressImage(file, 600, 0.4);
+                    const hq      = await compressImage(file, 1600, 0.82);
+                    processed.push({ preview, hq });
+                } catch (err) { console.error(err); }
             }
             if (processed.length > 0) {
                 setEntries(prev => prev.map(ent => ent.id === id ? { ...ent, images: [...ent.images, ...processed].slice(0, 2) } : ent));
@@ -190,7 +225,7 @@ export default function App() {
                 
                 for (let j = 0; j < entry.images.length; j++) {
                     const imgObj = entry.images[j];
-                    const imgDataUrl = imgObj.preview;
+                    const imgDataUrl = imgObj.hq || imgObj.preview;
                     
                     const img = new Image();
                     img.src = imgDataUrl;
@@ -315,10 +350,20 @@ export default function App() {
                         </button>
                     ))}
                     <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-3">
+                        {selectedProjectName && (
+                            <span className="hidden sm:inline-flex px-3 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
+                                {selectedProjectName}
+                            </span>
+                        )}
                         <span className="text-xs text-gray-500">{user.name}</span>
                         <button onClick={logout} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">登出</button>
                     </div>
                 </div>
+                {selectedProjectName && (
+                    <div className="sm:hidden bg-gray-50 border-t border-gray-100 px-4 py-1.5 text-xs text-gray-500 text-center">
+                        目前工地：<span className="font-medium text-gray-700">{selectedProjectName}</span>
+                    </div>
+                )}
             </div>
 
             <Suspense fallback={null}>{activeSection === 'site' ? (

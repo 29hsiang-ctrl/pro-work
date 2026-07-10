@@ -27,7 +27,7 @@ export async function applyWatermark(dataUrl, text) {
     ctx.fillStyle = '#dc2626';
     ctx.textBaseline = 'top';
     ctx.fillText(text, rectX + paddingX, rectY + paddingY + (lineHeight - fontSize) / 2);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 export const compressImage = (file, maxWidth = 800, quality = 0.5) => {
