@@ -6,6 +6,7 @@ export const ROLES = {
     purchasing: { label: '採購人員', pages: ['dashboard','factory','calendar'] },
     site:       { label: '工地人員', pages: ['dashboard','site','calendar'] },
     owner:      { label: '業主',     pages: ['dashboard','calendar'], readonly: true },
+    pending:    { label: '待審核',   pages: [] },
 };
 
 const AUTH_KEY = 'auth_user';

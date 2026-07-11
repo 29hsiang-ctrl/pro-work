@@ -12,6 +12,7 @@ import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { PendingPage } from './pages/PendingPage';
 import { useProject } from './context/ProjectContext';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -328,6 +329,7 @@ export default function App() {
     if (!user && resetToken) return <ResetPasswordPage token={resetToken} />;
     if (!user) return <LoginPage />;
     if (user.mustChangePassword) return <ChangePasswordPage />;
+    if (user.role === 'pending') return <PendingPage />;
     if (dbLoading && !hasCachedData) return <div className="flex items-center justify-center min-h-screen text-gray-400 font-sans text-sm">連線中...</div>;
     if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen text-red-400 font-sans gap-2"><p className="font-bold">資料庫連線失敗</p><p className="text-xs text-gray-400">{dbError}</p></div>;
 

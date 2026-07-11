@@ -606,7 +606,7 @@ function UsersTab({ onUsersChange }) {
                                     <input autoFocus type="text" placeholder="姓名 *" value={editForm.name||''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
                                     <input type="text" placeholder="帳號" value={editForm.account||''} onChange={e => setEditForm(f => ({ ...f, account: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
                                     <select value={editForm.role||'site'} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50 col-span-2">
-                                        {Object.entries(ROLE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                                        {Object.entries(ROLE_LABELS).filter(([k]) => k !== 'pending').map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                                     </select>
                                     <input type="email" placeholder="Gmail（忘記密碼用，選填）" value={editForm.email||''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50 col-span-2" />
                                 </div>
@@ -627,7 +627,8 @@ function UsersTab({ onUsersChange }) {
                                             u.role === 'site' ? 'bg-orange-100 text-orange-700' :
                                             'bg-green-100 text-green-700'
                                         }`}>{ROLE_LABELS[u.role] || u.role}</span>
-                                        {u.mustChangePassword && <span className="text-xs text-amber-500">（待設定密碼）</span>}
+                                        {u.role === 'pending' && <span className="text-xs text-orange-500 font-medium">待審核</span>}
+                                        {u.mustChangePassword && u.role !== 'pending' && <span className="text-xs text-amber-500">（待設定密碼）</span>}
                                     </div>
                                     <p className="text-xs text-gray-400 mt-0.5">{u.account}{u.email ? ` · ${u.email}` : ''}{u.googleId ? ' · 🔗 Google' : ''}</p>
                                 </div>

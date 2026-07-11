@@ -42,7 +42,7 @@ async function sendResetEmail(toEmail, resetUrl) {
         secure: true,
         auth: {
             user: process.env.GMAIL_USER,
-            pass: process.env.GMAIL_APP_PASSWORD,
+            pass: (process.env.GMAIL_APP_PASSWORD || '').replace(/\s/g, ''),
         },
     });
     await transporter.sendMail({
@@ -108,12 +108,34 @@ export const handler = async (event) => {
             return ok(safeUser(user));
         }
 
+        // ── Google 帳號自助申請 ───────────────────────
+        if (action === 'register') {
+            const { googleToken, displayName } = body;
+            if (!googleToken) return err(400, '缺少 googleToken');
+            const payload = await verifyGoogleToken(googleToken);
+            const existing = await users.findOne({ googleId: payload.sub });
+            if (existing) return ok({ alreadyExists: true });
+            const id = uid();
+            const name = displayName?.trim() || payload.name || payload.email.split('@')[0];
+            await users.insertOne({
+                _id: id,
+                name,
+                account: payload.email,
+                email: payload.email,
+                googleId: payload.sub,
+                passwordHash: '',
+                role: 'pending',
+                mustChangePassword: false,
+                createdAt: new Date().toISOString(),
+            });
+            return ok({ id, name, email: payload.email });
+        }
+
         // ── 綁定 Google 帳號 ──────────────────────────
         if (action === 'linkGoogle') {
             const { userId, googleToken } = body;
             if (!userId || !googleToken) return err(400, '缺少必要欄位');
             const payload = await verifyGoogleToken(googleToken);
-            // 確認此 Google 帳號未被其他 user 使用
             const conflict = await users.findOne({ googleId: payload.sub, _id: { $ne: userId } });
             if (conflict) return err(409, '此 Google 帳號已綁定其他使用者');
             await users.updateOne(
@@ -126,21 +148,24 @@ export const handler = async (event) => {
 
         // ── 忘記密碼：寄重設信 ────────────────────────
         if (action === 'forgotPassword') {
-            const { account } = body;
-            // 統一回傳 ok，不暴露帳號是否存在
-            if (account) {
-                const user = await users.findOne({ account });
-                if (user?.email) {
-                    const token = crypto.randomBytes(16).toString('hex');
-                    const expiry = Date.now() + 60 * 60 * 1000; // 1 小時
-                    await users.updateOne(
-                        { _id: user._id },
-                        { $set: { resetToken: token, resetTokenExpiry: expiry } }
-                    );
-                    const appUrl = process.env.APP_URL || 'http://localhost:8888';
-                    const resetUrl = `${appUrl}/?reset_token=${token}`;
-                    await sendResetEmail(user.email, resetUrl);
+            try {
+                const { account } = body;
+                if (account) {
+                    const user = await users.findOne({ account });
+                    if (user?.email) {
+                        const token = crypto.randomBytes(16).toString('hex');
+                        const expiry = Date.now() + 60 * 60 * 1000;
+                        await users.updateOne(
+                            { _id: user._id },
+                            { $set: { resetToken: token, resetTokenExpiry: expiry } }
+                        );
+                        const appUrl = process.env.APP_URL || 'http://localhost:8888';
+                        const resetUrl = `${appUrl}/?reset_token=${token}`;
+                        await sendResetEmail(user.email, resetUrl);
+                    }
                 }
+            } catch (e) {
+                console.error('forgotPassword error:', e.message);
             }
             return ok({ ok: true });
         }
