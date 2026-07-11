@@ -23,10 +23,15 @@ export const handler = async (event) => {
                 return ok(item);
             }
             case 'PUT': {
-                const { id, title, category, content } = JSON.parse(event.body);
+                const { id, title, category, content, folderId } = JSON.parse(event.body);
                 if (!id) return err(400, '缺少 id');
                 const updatedAt = new Date().toISOString();
-                await col.updateOne({ _id: id }, { $set: { title, category, content, updatedAt } });
+                const patch = { updatedAt };
+                if (title     !== undefined) patch.title    = title;
+                if (category  !== undefined) patch.category = category;
+                if (content   !== undefined) patch.content  = content;
+                if (folderId  !== undefined) patch.folderId = folderId;
+                await col.updateOne({ _id: id }, { $set: patch });
                 return ok({ ok: true, updatedAt });
             }
             case 'DELETE': {

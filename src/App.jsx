@@ -18,6 +18,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ de
 const DrawingPage   = lazy(() => import('./pages/DrawingPage').then(m => ({ default: m.DrawingPage })));
 const FactoryPage   = lazy(() => import('./pages/FactoryPage').then(m => ({ default: m.FactoryPage })));
 const SettingsPage  = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const StoragePage   = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })));
 
 const MAIN_NAV = [
     { key: 'dashboard', label: '首頁' },
@@ -25,6 +26,7 @@ const MAIN_NAV = [
     { key: 'factory',   label: '下料' },
     { key: 'site',      label: '工地現場' },
     { key: 'calendar',  label: '日曆' },
+    { key: 'storage',   label: '儲存庫' },
     { key: 'settings',  label: '系統設定' },
 ];
 
@@ -32,7 +34,7 @@ const VIEW_MENU = [
     { group: '照片記錄', items: [{ label: '照片黏貼', key: 'photo' }] },
     { group: '量測工具', items: [
         { label: '四周量測', key: 'dimension' },
-        { label: '兩側量測', key: 'twoSide' },
+        // { label: '兩側量測', key: 'twoSide' },
         { label: '代號量測(樓層)', key: 'code' },
         { label: '代號量測(平面)', key: 'codePlan' },
     ]},
@@ -447,6 +449,8 @@ export default function App() {
                 <DrawingPage />
             ) : activeSection === 'factory' ? (
                 <FactoryPage />
+            ) : activeSection === 'storage' ? (
+                <StoragePage />
             ) : activeSection === 'settings' ? (
                 <SettingsPage />
             ) : (

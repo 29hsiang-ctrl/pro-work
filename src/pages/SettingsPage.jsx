@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useProject, ITEM_TYPES, FACTORY_STEPS_BY_TYPE } from '../context/ProjectContext';
 import { useSettings } from '../context/SettingsContext';
-import { useAuth } from '../context/AuthContext';
 
 const ROLE_LABELS = {
     admin:      '管理員',
@@ -413,7 +412,7 @@ function StepsTab({ settings, setSettings }) {
 // ════════════════════════════════════════════════════
 function VendorsTab({ settings, setSettings }) {
     const [adding, setAdding] = useState(false);
-    const [form, setForm] = useState({ name: '', phone: '', email: '', note: '' });
+    const [form, setForm] = useState({ name: '', type: '', phone: '', email: '', address: '', note: '' });
     const [editId, setEditId] = useState(null);
     const [editForm, setEditForm] = useState({});
 
@@ -422,7 +421,7 @@ function VendorsTab({ settings, setSettings }) {
     const handleAdd = () => {
         if (!form.name.trim()) return;
         setSettings(s => ({ ...s, vendors: [...(s.vendors || []), { id: uid(), ...form }] }));
-        setForm({ name: '', phone: '', email: '', note: '' });
+        setForm({ name: '', type: '', phone: '', email: '', address: '', note: '' });
         setAdding(false);
     };
     const handleSave = (id) => {
@@ -442,12 +441,12 @@ function VendorsTab({ settings, setSettings }) {
             </div>
             {adding && (
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-2">
-                    {[['name','廠商名稱 *','text'],['phone','電話','tel'],['email','Email','email'],['note','備註','text']].map(([k,ph,tp]) => (
+                    {[['name','廠商名稱 *','text'],['type','廠商種類','text'],['phone','電話','tel'],['email','Email','email'],['address','地址','text'],['note','備註','text']].map(([k,ph,tp]) => (
                         <input key={k} type={tp} placeholder={ph} value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-white" />
                     ))}
                     <div className="flex gap-2">
                         <button onClick={handleAdd} className="px-4 py-1.5 bg-gray-900 text-white text-sm rounded-lg">新增</button>
-                        <button onClick={() => { setAdding(false); setForm({ name:'',phone:'',email:'',note:'' }); }} className="px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-200 rounded-lg">取消</button>
+                        <button onClick={() => { setAdding(false); setForm({ name:'',phone:'',email:'',address:'',note:'' }); }} className="px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-200 rounded-lg">取消</button>
                     </div>
                 </div>
             )}
@@ -459,7 +458,7 @@ function VendorsTab({ settings, setSettings }) {
                         <div key={v.id} className="bg-white px-4 py-3">
                             {editId === v.id ? (
                                 <div className="space-y-2">
-                                    {[['name','廠商名稱 *','text'],['phone','電話','tel'],['email','Email','email'],['note','備註','text']].map(([k,ph,tp]) => (
+                                    {[['name','廠商名稱 *','text'],['type','廠商種類','text'],['phone','電話','tel'],['email','Email','email'],['address','地址','text'],['note','備註','text']].map(([k,ph,tp]) => (
                                         <input key={k} type={tp} placeholder={ph} value={editForm[k]||''} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))} className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400 bg-gray-50" />
                                     ))}
                                     <div className="flex gap-2">
@@ -470,15 +469,14 @@ function VendorsTab({ settings, setSettings }) {
                             ) : (
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="font-medium text-sm text-gray-800">{v.name}</p>
-                                        <div className="flex gap-3 mt-0.5">
-                                            {v.phone && <p className="text-xs text-gray-400">{v.phone}</p>}
-                                            {v.email && <p className="text-xs text-gray-400">{v.email}</p>}
-                                        </div>
-                                        {v.note && <p className="text-xs text-gray-300 mt-0.5">{v.note}</p>}
+                                        <p className="font-medium text-sm text-gray-800">{v.name}{v.type ? <span className="text-xs text-gray-500 ml-2">{v.type}</span> : null}</p>
+                                        {v.phone && <p className="text-xs text-gray-400 mt-0.5"><span className="text-gray-500">電話：</span>{v.phone}</p>}
+                                        {v.email && <p className="text-xs text-gray-400 mt-0.5"><span className="text-gray-500">電子郵件：</span>{v.email}</p>}
+                                        {v.address && <p className="text-xs text-gray-400 mt-0.5"><span className="text-gray-500">地址：</span>{v.address}</p>}
+                                        {v.note && <p className="text-xs text-gray-400 mt-0.5"><span className="text-gray-500">備註：</span>{v.note}</p>}
                                     </div>
                                     <div className="flex gap-3 flex-shrink-0 ml-2">
-                                        <button onClick={() => { setEditId(v.id); setEditForm({ name:v.name, phone:v.phone||'', email:v.email||'', note:v.note||'' }); }} className="text-xs text-gray-400 hover:text-gray-700">編輯</button>
+                                        <button onClick={() => { setEditId(v.id); setEditForm({ name:v.name, type:v.type||'', phone:v.phone||'', email:v.email||'', address:v.address||'', note:v.note||'' }); }} className="text-xs text-gray-400 hover:text-gray-700">編輯</button>
                                         <button onClick={() => handleDelete(v.id)} className="text-xs text-red-400 hover:text-red-600">刪除</button>
                                     </div>
                                 </div>
@@ -654,125 +652,6 @@ function UsersTab({ onUsersChange }) {
 }
 
 // ════════════════════════════════════════════════════
-// Tab 4：個人帳號
-// ════════════════════════════════════════════════════
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-function ProfileTab() {
-    const { user, updateUser, linkGoogle } = useAuth();
-    const [linkLoading, setLinkLoading] = useState(false);
-    const [unlinkLoading, setUnlinkLoading] = useState(false);
-    const [msg, setMsg] = useState('');
-    const [error, setError] = useState('');
-
-    const handleLinkGoogle = () => {
-        if (!window.google?.accounts?.oauth2) {
-            // 使用 id token flow
-            window.google?.accounts?.id?.prompt();
-            return;
-        }
-    };
-
-    const triggerGoogleLink = () => {
-        if (!GOOGLE_CLIENT_ID) { setError('未設定 Google Client ID'); return; }
-        if (!window.google?.accounts?.id) { setError('Google 服務未載入，請重新整理頁面'); return; }
-        setError('');
-        window.google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: async (response) => {
-                setLinkLoading(true);
-                const result = await linkGoogle(response.credential);
-                setLinkLoading(false);
-                if (result.ok) {
-                    setMsg('Google 帳號綁定成功');
-                } else {
-                    setError(result.error || '綁定失敗');
-                }
-            },
-        });
-        window.google.accounts.id.prompt();
-    };
-
-    const handleUnlink = async () => {
-        if (!window.confirm('確認解除 Google 帳號綁定？')) return;
-        setUnlinkLoading(true);
-        setError('');
-        try {
-            const res = await fetch('/api/users', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: user.id, googleId: null }),
-            });
-            if (res.ok) {
-                updateUser({ googleId: null });
-                setMsg('已解除 Google 帳號綁定');
-            } else {
-                setError('解除綁定失敗');
-            }
-        } catch { setError('連線失敗'); }
-        setUnlinkLoading(false);
-    };
-
-    const ROLE_LABELS_MAP = { admin:'管理員', drawing:'繪圖員', purchasing:'採購人員', site:'工地人員', owner:'業主' };
-
-    return (
-        <div className="space-y-4 max-w-md">
-            <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
-                <div className="px-4 py-3">
-                    <p className="text-xs text-gray-400">姓名</p>
-                    <p className="text-sm font-medium text-gray-800 mt-0.5">{user?.name}</p>
-                </div>
-                <div className="px-4 py-3">
-                    <p className="text-xs text-gray-400">帳號</p>
-                    <p className="text-sm font-medium text-gray-800 mt-0.5">{user?.account}</p>
-                </div>
-                <div className="px-4 py-3">
-                    <p className="text-xs text-gray-400">角色</p>
-                    <p className="text-sm font-medium text-gray-800 mt-0.5">{ROLE_LABELS_MAP[user?.role] || user?.role}</p>
-                </div>
-                <div className="px-4 py-3">
-                    <p className="text-xs text-gray-400">綁定 Gmail</p>
-                    <p className="text-sm font-medium text-gray-800 mt-0.5">{user?.email || '尚未綁定'}</p>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-                <p className="text-sm font-medium text-gray-700">Google 帳號綁定</p>
-                {user?.googleId ? (
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-green-600 font-medium">已綁定</p>
-                            <p className="text-xs text-gray-400">{user.email}</p>
-                        </div>
-                        <button
-                            onClick={handleUnlink}
-                            disabled={unlinkLoading}
-                            className="text-xs text-red-400 hover:text-red-600 border border-red-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
-                        >
-                            {unlinkLoading ? '解除中...' : '解除綁定'}
-                        </button>
-                    </div>
-                ) : (
-                    <div>
-                        <p className="text-xs text-gray-400 mb-2">綁定後可直接用 Google 帳號登入</p>
-                        <button
-                            onClick={triggerGoogleLink}
-                            disabled={linkLoading || !GOOGLE_CLIENT_ID}
-                            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60"
-                        >
-                            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                            {linkLoading ? '綁定中...' : '綁定 Google 帳號'}
-                        </button>
-                    </div>
-                )}
-                {msg && <p className="text-xs text-green-600">{msg}</p>}
-                {error && <p className="text-xs text-red-500">{error}</p>}
-            </div>
-        </div>
-    );
-}
-
-// ════════════════════════════════════════════════════
 // 主元件
 // ════════════════════════════════════════════════════
 const TABS = [
@@ -780,7 +659,6 @@ const TABS = [
     { key: 'steps',    label: '流程步驟' },
     { key: 'vendors',  label: '廠商管理' },
     { key: 'users',    label: '人員帳號' },
-    { key: 'profile',  label: '個人帳號' },
 ];
 
 export function SettingsPage() {
@@ -813,7 +691,6 @@ export function SettingsPage() {
                 {activeTab === 'steps'    && <StepsTab settings={settings} setSettings={setSettings} />}
                 {activeTab === 'vendors'  && <VendorsTab settings={settings} setSettings={setSettings} />}
                 {activeTab === 'users'    && <UsersTab onUsersChange={setDbUsers} />}
-                {activeTab === 'profile'  && <ProfileTab />}
             </div>
         </div>
     );
