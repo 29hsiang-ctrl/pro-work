@@ -1,17 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const SAVED_ACCOUNT_KEY = 'pw_saved_account';
 const SAVED_PW_KEY = 'pw_saved_pw';
 const REMEMBER_KEY = 'pw_remember';
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
 export function LoginPage() {
-    const { login } = useAuth();
+    const { login, googleLogin } = useAuth();
+    const [mode, setMode] = useState('login'); // 'login' | 'forgot'
     const [account, setAccount] = useState('');
     const [password, setPassword] = useState('');
     const [remember, setRemember] = useState(() => localStorage.getItem(REMEMBER_KEY) !== 'false');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const googleBtnRef = useRef(null);
 
     useEffect(() => {
         if (localStorage.getItem(REMEMBER_KEY) !== 'false') {
@@ -21,6 +25,38 @@ export function LoginPage() {
             if (savedPw) setPassword(savedPw);
         }
     }, []);
+
+    useEffect(() => {
+        if (!GOOGLE_CLIENT_ID || !googleBtnRef.current || mode !== 'login') return;
+        const initBtn = () => {
+            if (!window.google?.accounts?.id) return false;
+            window.google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: async (response) => {
+                    setError('');
+                    setLoading(true);
+                    const result = await googleLogin(response.credential, remember);
+                    setLoading(false);
+                    if (!result.ok) {
+                        setError(result.needLink
+                            ? `此 Google 帳號（${result.googleEmail}）尚未綁定，請先用帳號密碼登入後至設定頁綁定`
+                            : result.error || 'Google 登入失敗'
+                        );
+                    }
+                },
+            });
+            window.google.accounts.id.renderButton(googleBtnRef.current, {
+                type: 'standard', shape: 'rectangular', theme: 'outline',
+                text: 'signin_with', size: 'large', locale: 'zh-TW',
+                width: googleBtnRef.current.offsetWidth || 340,
+            });
+            return true;
+        };
+        if (!initBtn()) {
+            const t = setInterval(() => { if (initBtn()) clearInterval(t); }, 200);
+            return () => clearInterval(t);
+        }
+    }, [mode, remember]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -41,6 +77,8 @@ export function LoginPage() {
         setLoading(false);
         if (!result.ok) setError(result.error || '帳號或密碼錯誤');
     };
+
+    if (mode === 'forgot') return <ForgotPasswordView onBack={() => { setMode('login'); setError(''); }} />;
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 font-sans">
@@ -76,15 +114,24 @@ export function LoginPage() {
                         />
                     </div>
 
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                            type="checkbox"
-                            checked={remember}
-                            onChange={e => setRemember(e.target.checked)}
-                            className="w-4 h-4 rounded accent-gray-900"
-                        />
-                        <span className="text-xs text-gray-500">記住帳號密碼</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={remember}
+                                onChange={e => setRemember(e.target.checked)}
+                                className="w-4 h-4 rounded accent-gray-900"
+                            />
+                            <span className="text-xs text-gray-500">記住帳號密碼</span>
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => { setMode('forgot'); setError(''); }}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            忘記密碼？
+                        </button>
+                    </div>
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
@@ -95,7 +142,91 @@ export function LoginPage() {
                     >
                         {loading ? '登入中...' : '登入'}
                     </button>
+
+                    {GOOGLE_CLIENT_ID && (
+                        <>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 h-px bg-gray-100" />
+                                <span className="text-xs text-gray-300">或</span>
+                                <div className="flex-1 h-px bg-gray-100" />
+                            </div>
+                            <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
+                        </>
+                    )}
                 </form>
+            </div>
+        </div>
+    );
+}
+
+function ForgotPasswordView({ onBack }) {
+    const [account, setAccount] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [sent, setSent] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            await fetch('/api/auth?action=forgotPassword', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account: account.trim() }),
+            });
+            setSent(true);
+        } catch {
+            setError('連線失敗，請稍後再試');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 font-sans">
+            <div className="w-full max-w-sm">
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Pro Work</h1>
+                    <p className="text-sm text-gray-400 mt-1">重設密碼</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+                    {sent ? (
+                        <div className="text-center py-4 space-y-3">
+                            <div className="text-4xl">✉️</div>
+                            <p className="text-sm text-gray-700 font-medium">重設連結已送出</p>
+                            <p className="text-xs text-gray-400">若帳號存在且已綁定 Gmail，重設連結將在幾分鐘內寄出，請檢查收件匣（含垃圾郵件）。</p>
+                            <button onClick={onBack} className="w-full py-2.5 mt-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl transition-colors">
+                                返回登入
+                            </button>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <p className="text-xs text-gray-500">輸入登入帳號，若該帳號已綁定 Gmail，重設連結將寄至信箱。</p>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1.5">帳號</label>
+                                <input
+                                    type="text"
+                                    value={account}
+                                    onChange={e => setAccount(e.target.value)}
+                                    placeholder="請輸入帳號"
+                                    required
+                                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 outline-none focus:border-gray-400 transition-colors bg-gray-50"
+                                />
+                            </div>
+                            {error && <p className="text-xs text-red-500">{error}</p>}
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition-colors disabled:opacity-60"
+                            >
+                                {loading ? '送出中...' : '寄出重設連結'}
+                            </button>
+                            <button type="button" onClick={onBack} className="w-full py-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                                返回登入
+                            </button>
+                        </form>
+                    )}
+                </div>
             </div>
         </div>
     );

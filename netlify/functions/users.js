@@ -17,7 +17,7 @@ export const handler = async (event) => {
                 return ok(users.map(({ _id, ...rest }) => ({ id: _id, ...rest })));
             }
             case 'POST': {
-                const { name, account, role } = JSON.parse(event.body || '{}');
+                const { name, account, role, email } = JSON.parse(event.body || '{}');
                 if (!name?.trim() || !account?.trim() || !role) return err(400, '請填入姓名、帳號與角色');
                 const existing = await col.findOne({ account: account.trim() });
                 if (existing) return err(409, '此帳號已存在');
@@ -27,6 +27,7 @@ export const handler = async (event) => {
                     _id: id,
                     name: name.trim(),
                     account: account.trim(),
+                    email: email?.trim() || '',
                     passwordHash,
                     role,
                     mustChangePassword: true,
@@ -49,6 +50,8 @@ export const handler = async (event) => {
                 if (body.name !== undefined) fields.name = body.name;
                 if (body.role !== undefined) fields.role = body.role;
                 if (body.account !== undefined) fields.account = body.account;
+                if (body.email !== undefined) fields.email = body.email;
+                if (body.googleId !== undefined) fields.googleId = body.googleId;
                 await col.updateOne({ _id: body.id }, { $set: fields });
                 return ok({ ok: true });
             }

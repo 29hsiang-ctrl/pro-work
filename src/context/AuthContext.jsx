@@ -20,6 +20,17 @@ export function AuthProvider({ children }) {
         } catch { return null; }
     });
 
+    const persistUser = (data, remember) => {
+        setUser(data);
+        if (remember) {
+            localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+            sessionStorage.removeItem(AUTH_KEY);
+        } else {
+            sessionStorage.setItem(AUTH_KEY, JSON.stringify(data));
+            localStorage.removeItem(AUTH_KEY);
+        }
+    };
+
     const login = async (account, password, remember = true) => {
         try {
             const res = await fetch('/api/auth?action=login', {
@@ -29,14 +40,41 @@ export function AuthProvider({ children }) {
             });
             const data = await res.json();
             if (!res.ok) return { ok: false, error: data.error || '帳號或密碼錯誤' };
-            setUser(data);
-            if (remember) {
-                localStorage.setItem(AUTH_KEY, JSON.stringify(data));
-                sessionStorage.removeItem(AUTH_KEY);
-            } else {
-                sessionStorage.setItem(AUTH_KEY, JSON.stringify(data));
-                localStorage.removeItem(AUTH_KEY);
-            }
+            persistUser(data, remember);
+            return { ok: true };
+        } catch {
+            return { ok: false, error: '伺服器連線失敗，請稍後再試' };
+        }
+    };
+
+    const googleLogin = async (googleToken, remember = true) => {
+        try {
+            const res = await fetch('/api/auth?action=googleLogin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ googleToken }),
+            });
+            const data = await res.json();
+            if (!res.ok) return { ok: false, error: data.error || 'Google 登入失敗' };
+            if (data.needLink) return { ok: false, needLink: true, googleEmail: data.googleEmail };
+            persistUser(data, remember);
+            return { ok: true };
+        } catch {
+            return { ok: false, error: '伺服器連線失敗，請稍後再試' };
+        }
+    };
+
+    const linkGoogle = async (googleToken) => {
+        if (!user) return { ok: false, error: '請先登入' };
+        try {
+            const res = await fetch('/api/auth?action=linkGoogle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, googleToken }),
+            });
+            const data = await res.json();
+            if (!res.ok) return { ok: false, error: data.error || '綁定失敗' };
+            updateUser({ googleId: data.googleId, email: data.email });
             return { ok: true };
         } catch {
             return { ok: false, error: '伺服器連線失敗，請稍後再試' };
@@ -59,7 +97,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, updateUser, ROLES }}>
+        <AuthContext.Provider value={{ user, login, googleLogin, linkGoogle, logout, updateUser, ROLES }}>
             {children}
         </AuthContext.Provider>
     );
