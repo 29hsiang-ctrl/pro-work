@@ -60,6 +60,11 @@
   to = "/.netlify/functions/calendar"
   status = 200
 
+[[redirects]]
+  from = "/api/storage"
+  to = "/.netlify/functions/storage"
+  status = 200
+
 # SPA fallback（必須放最後）
 [[redirects]]
   from = "/*"

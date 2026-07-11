@@ -1,10 +1,10 @@
 import { createContext, useState, useContext } from 'react';
 
 export const ROLES = {
-    admin:      { label: '管理員',   pages: ['dashboard','drawing','site','factory','calendar','settings'] },
-    drawing:    { label: '繪圖員',   pages: ['dashboard','drawing','calendar'] },
-    purchasing: { label: '採購人員', pages: ['dashboard','factory','calendar'] },
-    site:       { label: '工地人員', pages: ['dashboard','site','calendar'] },
+    admin:      { label: '管理員',   pages: ['dashboard','drawing','site','factory','storage','calendar','settings'] },
+    drawing:    { label: '繪圖員',   pages: ['dashboard','drawing','storage','calendar'] },
+    purchasing: { label: '採購人員', pages: ['dashboard','factory','storage','calendar'] },
+    site:       { label: '工地人員', pages: ['dashboard','site','storage','calendar'] },
     owner:      { label: '業主',     pages: ['dashboard','calendar'], readonly: true },
     pending:    { label: '待審核',   pages: [] },
 };
