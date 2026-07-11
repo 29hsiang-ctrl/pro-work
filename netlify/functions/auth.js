@@ -1,7 +1,5 @@
 import { getDb, ok, err } from './lib/mongodb.js';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -22,7 +20,7 @@ async function seedAdmin(col) {
 }
 
 function safeUser(user) {
-    const { passwordHash: _, _id, resetToken: __, resetTokenExpiry: ___, ...rest } = user;
+    const { passwordHash: _, _id, ...rest } = user;
     return { id: _id, ...rest };
 }
 
@@ -35,30 +33,6 @@ async function verifyGoogleToken(googleToken) {
     return payload;
 }
 
-async function sendResetEmail(toEmail, resetUrl) {
-    const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-            user: process.env.GMAIL_USER,
-            pass: (process.env.GMAIL_APP_PASSWORD || '').replace(/\s/g, ''),
-        },
-    });
-    await transporter.sendMail({
-        from: `"Pro Work" <${process.env.GMAIL_USER}>`,
-        to: toEmail,
-        subject: '【Pro Work】密碼重設連結',
-        html: `
-            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-                <h2 style="color:#111">Pro Work 密碼重設</h2>
-                <p>請點擊下方連結重設密碼，連結將在 <strong>1 小時</strong>後失效：</p>
-                <a href="${resetUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;background:#111;color:#fff;border-radius:8px;text-decoration:none">重設密碼</a>
-                <p style="color:#888;font-size:12px">若你沒有申請重設密碼，請忽略此信。</p>
-            </div>
-        `,
-    });
-}
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return ok({});
@@ -144,58 +118,6 @@ export const handler = async (event) => {
             );
             const updated = await users.findOne({ _id: userId });
             return ok(safeUser(updated));
-        }
-
-        // ── 忘記密碼：寄重設信 ────────────────────────
-        if (action === 'forgotPassword') {
-            try {
-                const { account } = body;
-                if (account) {
-                    const user = await users.findOne({ account });
-                    if (user?.email) {
-                        const token = crypto.randomBytes(16).toString('hex');
-                        const expiry = Date.now() + 60 * 60 * 1000;
-                        await users.updateOne(
-                            { _id: user._id },
-                            { $set: { resetToken: token, resetTokenExpiry: expiry } }
-                        );
-                        const appUrl = process.env.APP_URL || 'http://localhost:8888';
-                        const resetUrl = `${appUrl}/?reset_token=${token}`;
-                        await sendResetEmail(user.email, resetUrl);
-                    }
-                }
-            } catch (e) {
-                console.error('forgotPassword error:', e.message);
-            }
-            return ok({ ok: true });
-        }
-
-        // ── 驗證重設 token ────────────────────────────
-        if (action === 'verifyResetToken') {
-            const { token } = body;
-            if (!token) return ok({ ok: false });
-            const user = await users.findOne({ resetToken: token });
-            if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < Date.now()) {
-                return ok({ ok: false });
-            }
-            return ok({ ok: true });
-        }
-
-        // ── 用 token 重設密碼 ─────────────────────────
-        if (action === 'resetPasswordByToken') {
-            const { token, newPassword } = body;
-            if (!token || !newPassword) return err(400, '缺少必要欄位');
-            if (newPassword.length < 6) return err(400, '密碼至少 6 碼');
-            const user = await users.findOne({ resetToken: token });
-            if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < Date.now()) {
-                return err(400, '連結已失效或過期');
-            }
-            const passwordHash = await bcrypt.hash(newPassword, 10);
-            await users.updateOne(
-                { _id: user._id },
-                { $set: { passwordHash, mustChangePassword: false }, $unset: { resetToken: '', resetTokenExpiry: '' } }
-            );
-            return ok({ ok: true });
         }
 
         return err(400, `未知的 action: ${action}`);

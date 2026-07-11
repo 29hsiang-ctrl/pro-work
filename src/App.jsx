@@ -11,7 +11,6 @@ import { useAuth } from './context/AuthContext';
 import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { PendingPage } from './pages/PendingPage';
 import { useProject } from './context/ProjectContext';
 
@@ -325,8 +324,6 @@ export default function App() {
     for (let i = 0; i < entries.length; i += 3) chunkedEntries.push(entries.slice(i, i + 3));
     if (chunkedEntries.length === 0) chunkedEntries.push([]);
 
-    const resetToken = new URLSearchParams(window.location.search).get('reset_token');
-    if (!user && resetToken) return <ResetPasswordPage token={resetToken} />;
     if (!user) return <LoginPage />;
     if (user.mustChangePassword) return <ChangePasswordPage />;
     if (user.role === 'pending') return <PendingPage />;
