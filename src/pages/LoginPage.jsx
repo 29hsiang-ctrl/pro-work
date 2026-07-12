@@ -5,7 +5,7 @@ const SAVED_ACCOUNT_KEY = 'pw_saved_account';
 const SAVED_PW_KEY = 'pw_saved_pw';
 const REMEMBER_KEY = 'pw_remember';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = '343315337087-g0p1bbhuocrj7au9t271emgvfjmfof5r.apps.googleusercontent.com';
 
 export function LoginPage() {
     const { login, googleLogin } = useAuth();

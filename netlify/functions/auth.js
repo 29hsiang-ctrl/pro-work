@@ -28,7 +28,7 @@ async function verifyGoogleToken(googleToken) {
     const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${googleToken}`);
     if (!res.ok) throw new Error('Google token 驗證失敗');
     const payload = await res.json();
-    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+    const clientId = process.env.GOOGLE_CLIENT_ID || '343315337087-g0p1bbhuocrj7au9t271emgvfjmfof5r.apps.googleusercontent.com';
     if (payload.aud !== clientId) throw new Error('Google token aud 不符');
     return payload;
 }
