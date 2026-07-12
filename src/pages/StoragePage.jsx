@@ -3,6 +3,11 @@ import { compressImage } from '../utils/helpers';
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
+function parseRocDate(d = '') {
+    const [y, m, day] = d.split('.');
+    return { year: parseInt(y, 10) + 1911, monthDay: `${m}/${day}` };
+}
+
 // ── 拖曳調整寬度 ─────────────────────────────────────
 function useDragResize(defaultWidth, min = 160, max = 520) {
     const [width, setWidth] = useState(defaultWidth);
@@ -57,8 +62,10 @@ function ContextMenu({ menu, onClose, onAction }) {
                     : (
                         <button
                             key={i}
-                            onClick={() => { onAction(item.action, menu.target); onClose(); }}
-                            className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${item.danger ? 'text-red-500' : 'text-gray-700'}`}
+                            disabled={item.disabled}
+                            onClick={() => { if (!item.disabled) { onAction(item.action, menu.target); onClose(); } }}
+                            className={`w-full text-left px-4 py-2 transition-colors
+                                ${item.disabled ? 'text-gray-300 cursor-default' : item.danger ? 'text-red-500 hover:bg-gray-50' : 'text-gray-700 hover:bg-gray-50'}`}
                         >{item.label}</button>
                     )
             )}
@@ -128,6 +135,13 @@ export function StoragePage() {
 
     // 展開的資料夾 ids
     const [expandedFIds, setExpandedFIds] = useState(new Set());
+    // 照片資料夾
+    const [photoEntries, setPhotoEntries]           = useState([]);
+    const [projectMap, setProjectMap]               = useState({});
+    const [photoOpen, setPhotoOpen]                 = useState(false);
+    const [expandedPhotoProj, setExpandedPhotoProj] = useState(new Set());
+    const [selectedPhotoKey, setSelectedPhotoKey]   = useState(null); // "{projectId}|{date}"
+    const [lightboxImg, setLightboxImg]             = useState(null);
     // 右鍵選單
     const [ctxMenu, setCtxMenu]       = useState(null);
     // 重新命名資料夾
@@ -147,6 +161,11 @@ export function StoragePage() {
         next.has(fid) ? next.delete(fid) : next.add(fid);
         return next;
     });
+    const togglePhotoProj = (pid) => setExpandedPhotoProj(prev => {
+        const next = new Set(prev);
+        next.has(pid) ? next.delete(pid) : next.add(pid);
+        return next;
+    });
 
     const [leftWidth, onDragLeft]     = useDragResize(260, 160, 520);
 
@@ -163,9 +182,15 @@ export function StoragePage() {
         Promise.all([
             fetch('/api/storage').then(r => r.ok ? r.json() : []),
             fetch('/api/storageFolders').then(r => r.ok ? r.json() : []),
-        ]).then(([its, fds]) => {
+            fetch('/api/calendarPhotos').then(r => r.ok ? r.json() : []),
+            fetch('/api/init').then(r => r.ok ? r.json() : {}),
+        ]).then(([its, fds, photos, initData]) => {
             setItems(its);
             setFolders(fds);
+            setPhotoEntries(photos);
+            const pmap = {};
+            (initData.projects || []).forEach(p => { pmap[p.id] = p.name; });
+            setProjectMap(pmap);
         }).finally(() => setLoading(false));
     }, []);
 
@@ -307,6 +332,14 @@ export function StoragePage() {
         if (expandedFIds.has(id)) setExpandedFIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     };
 
+    // ── 複製筆記 ──────────────────────────────────
+    const handleDuplicate = async (item) => {
+        if (!item) return;
+        const copy = { id: uid(), title: item.title + '（副本）', category: item.category || '', content: item.content || '', folderId: item.folderId || null };
+        const res = await fetch('/api/storage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(copy) });
+        if (res.ok) { const created = await res.json(); setItems(prev => [created, ...prev]); setSelectedItem(created); setSelectedPhotoKey(null); }
+    };
+
     // ── 右鍵選單 ──────────────────────────────────
     const openCtx = (e, type, target) => {
         e.preventDefault();
@@ -319,12 +352,68 @@ export function StoragePage() {
         setCtxMenu({ x: e.clientX, y: e.clientY, type, target, items: items_map[type] });
     };
 
+    // ── 複製照片到剪貼簿 ─────────────────────────
+    const copyPhoto = async (src) => {
+        try {
+            const res = await fetch(src);
+            const blob = await res.blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        } catch { alert('複製失敗，請確認瀏覽器已允許剪貼簿權限'); }
+    };
+
+    // ── 刪除單張照片（從 calendarEntry 移除）────
+    const handleDeletePhoto = async (entryId, imageIdx) => {
+        if (!window.confirm('確認刪除此照片？')) return;
+        const res = await fetch(`/api/calendarPhotos?entryId=${entryId}&imageIdx=${imageIdx}`, { method: 'DELETE' });
+        if (!res.ok) return;
+        const { remaining } = await res.json();
+        setPhotoEntries(prev => {
+            const updated = prev.map(e => {
+                if (e.id !== entryId) return e;
+                return { ...e, images: e.images.filter((_, i) => i !== imageIdx) };
+            });
+            return remaining === 0 ? updated.filter(e => e.id !== entryId) : updated;
+        });
+    };
+
+    const openRightCtx = (e) => {
+        e.preventDefault();
+        const hasNote = !!selectedItem;
+        setCtxMenu({
+            x: e.clientX, y: e.clientY, type: 'right', target: selectedItem,
+            items: [
+                { label: '新增', action: 'addNew' },
+                { label: '複製', action: 'duplicate', disabled: !hasNote },
+                '---',
+                { label: '刪除', action: 'deleteNote', danger: true, disabled: !hasNote },
+            ],
+        });
+    };
+
+    const openPhotoCtx = (e, entryId, imageIdx, preview) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setCtxMenu({
+            x: e.clientX, y: e.clientY, type: 'photo',
+            target: { entryId, imageIdx, preview },
+            items: [
+                { label: '複製', action: 'copyPhoto' },
+                '---',
+                { label: '刪除', action: 'deletePhoto', danger: true },
+            ],
+        });
+    };
+
     const handleCtxAction = (action, target) => {
         if (action === 'createFolder') createFolder();
         if (action === 'renameFolder') startRename(target);
         if (action === 'deleteFolder') deleteFolder(target.id);
         if (action === 'moveNote')     setMovePicker(target.id);
-        if (action === 'deleteNote')   handleDeleteItem(target.id);
+        if (action === 'deleteNote')   handleDeleteItem(target?.id);
+        if (action === 'duplicate')    handleDuplicate(target);
+        if (action === 'copyPhoto')    copyPhoto(target.preview);
+        if (action === 'deletePhoto')  handleDeletePhoto(target.entryId, target.imageIdx);
+        if (action === 'addNew')       { setAddTitle(''); setAddCategory(''); setAddContent(''); setShowAddForm(true); setSelectedItem(null); setEditMode(false); setSelectedPhotoKey(null); setTimeout(() => { if (addEditorRef.current) addEditorRef.current.innerHTML = ''; }, 0); }
     };
 
     const startEdit = () => {
@@ -350,7 +439,7 @@ export function StoragePage() {
                 {/* 操作按鈕 */}
                 <div className="p-3 border-b border-gray-100 space-y-2">
                     <button
-                        onClick={() => { setAddTitle(''); setAddCategory(''); setAddContent(''); setShowAddForm(true); setSelectedItem(null); setEditMode(false); setTimeout(() => { if (addEditorRef.current) addEditorRef.current.innerHTML = ''; }, 0); }}
+                        onClick={() => { setAddTitle(''); setAddCategory(''); setAddContent(''); setShowAddForm(true); setSelectedItem(null); setEditMode(false); setSelectedPhotoKey(null); setTimeout(() => { if (addEditorRef.current) addEditorRef.current.innerHTML = ''; }, 0); }}
                         className="w-full px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-xl hover:bg-gray-700 transition-colors"
                     >+ 新增筆記</button>
                     <button
@@ -363,6 +452,86 @@ export function StoragePage() {
 
                 {/* 資料夾樹 */}
                 <div className="flex-1 overflow-y-auto">
+                    {/* ── 照片資料夾（固定頂層）── */}
+                    {(() => {
+                        const projectIds = [...new Set(photoEntries.map(e => e.projectId).filter(Boolean))];
+                        const totalPhotos = photoEntries.reduce((s, e) => s + e.images.length, 0);
+                        return (
+                            <div>
+                                <div
+                                    onClick={() => setPhotoOpen(p => !p)}
+                                    className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50 text-gray-600 transition-colors"
+                                >
+                                    <span className="flex items-center gap-1.5 text-sm">
+                                        <span className="text-xs text-gray-400 w-3">{photoOpen ? '▾' : '▸'}</span>
+                                        <span>📷</span>
+                                        <span>照片</span>
+                                    </span>
+                                    <span className="text-xs text-gray-400">{totalPhotos || ''}</span>
+                                </div>
+                                {photoOpen && (
+                                    <div className="ml-4 border-l border-gray-100">
+                                        {projectIds.length === 0 ? (
+                                            <p className="text-xs text-gray-300 px-3 py-2">尚無照片</p>
+                                        ) : projectIds.map(pid => {
+                                            const projName = projectMap[pid] || '未知工地';
+                                            const isProjOpen = expandedPhotoProj.has(pid);
+                                            const projEntries = photoEntries.filter(e => e.projectId === pid);
+                                            const uniqueDates = [...new Set(projEntries.map(e => e.date))].sort().reverse();
+                                            const projTotal = projEntries.reduce((s, e) => s + e.images.length, 0);
+                                            return (
+                                                <div key={pid}>
+                                                    <div
+                                                        onClick={() => togglePhotoProj(pid)}
+                                                        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-50 text-gray-600 transition-colors"
+                                                    >
+                                                        <span className="flex items-center gap-1.5 text-sm min-w-0 truncate">
+                                                            <span className="text-xs text-gray-400 w-3 flex-shrink-0">{isProjOpen ? '▾' : '▸'}</span>
+                                                            <span>📁</span>
+                                                            <span className="truncate">{projName}</span>
+                                                        </span>
+                                                        <span className="text-xs text-gray-400 ml-2 flex-shrink-0">{projTotal}</span>
+                                                    </div>
+                                                    {isProjOpen && (
+                                                        <div className="ml-4 border-l border-gray-100">
+                                                            {(() => {
+                                                                let prevYear = null;
+                                                                return uniqueDates.map(date => {
+                                                                    const { year, monthDay } = parseRocDate(date);
+                                                                    const showYear = prevYear !== null && year !== prevYear;
+                                                                    prevYear = year;
+                                                                    const key = `${pid}|${date}`;
+                                                                    const isSelected = selectedPhotoKey === key;
+                                                                    const dayCount = projEntries.filter(e => e.date === date).reduce((s, e) => s + e.images.length, 0);
+                                                                    return (
+                                                                        <div key={date}>
+                                                                            {showYear && (
+                                                                                <div className="px-3 py-1 text-xs text-gray-300 font-semibold select-none">{year}</div>
+                                                                            )}
+                                                                            <div
+                                                                                onClick={() => { setSelectedPhotoKey(key); setSelectedItem(null); setShowAddForm(false); setEditMode(false); }}
+                                                                                className={`flex items-center justify-between px-3 py-2 cursor-pointer text-sm transition-colors
+                                                                                    ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                                                                            >
+                                                                                <span>{monthDay}</span>
+                                                                                <span className="text-xs text-gray-400">{dayCount}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+                    <div className="border-t border-gray-100 my-1" />
+
                     {/* Inline 新增資料夾輸入框 */}
                     {creatingFolder && (
                         <div className="px-3 pt-2">
@@ -423,7 +592,7 @@ export function StoragePage() {
                                             ? <p className="text-xs text-gray-300 px-3 py-2">（空）</p>
                                             : folderNotes.map(item => (
                                                 <NoteRow key={item.id} item={item} selected={selectedItem?.id === item.id} draggingId={draggingId}
-                                                    onSelect={() => { setSelectedItem(item); setShowAddForm(false); setEditMode(false); }}
+                                                    onSelect={() => { setSelectedItem(item); setShowAddForm(false); setEditMode(false); setSelectedPhotoKey(null); }}
                                                     onDragStart={() => setDraggingId(item.id)}
                                                     onDragEnd={() => { setDraggingId(null); setDragOverFId(undefined); }}
                                                     onCtx={e => { e.preventDefault(); e.stopPropagation(); openCtx(e, 'note', item); }}
@@ -438,7 +607,7 @@ export function StoragePage() {
                     })}
 
                     {/* 根目錄筆記（無資料夾）*/}
-                    {folders.length > 0 && <div className="border-t border-gray-100 my-1" />}
+                    {folders.length > 0 && rootItems.length > 0 && <div className="border-t border-gray-100 my-1" />}
                     <div
                         className={`min-h-[32px] transition-colors ${dragOverFId === null ? 'bg-blue-50' : ''}`}
                         onDragOver={e => { e.preventDefault(); setDragOverFId(null); }}
@@ -450,7 +619,7 @@ export function StoragePage() {
                         )}
                         {rootItems.map(item => (
                             <NoteRow key={item.id} item={item} selected={selectedItem?.id === item.id} draggingId={draggingId}
-                                onSelect={() => { setSelectedItem(item); setShowAddForm(false); setEditMode(false); }}
+                                onSelect={() => { setSelectedItem(item); setShowAddForm(false); setEditMode(false); setSelectedPhotoKey(null); }}
                                 onDragStart={() => setDraggingId(item.id)}
                                 onDragEnd={() => { setDraggingId(null); setDragOverFId(undefined); }}
                                 onCtx={e => { e.preventDefault(); e.stopPropagation(); openCtx(e, 'note', item); }}
@@ -465,8 +634,42 @@ export function StoragePage() {
             <div onMouseDown={onDragLeft} className="w-1 flex-shrink-0 bg-gray-100 hover:bg-blue-300 active:bg-blue-400 cursor-col-resize transition-colors" />
 
             {/* ── 右側：內容區 ─────────────────────── */}
-            <div className="flex-1 overflow-y-auto bg-white select-text">
-                {showAddForm ? (
+            <div className="flex-1 overflow-y-auto bg-white select-text" onContextMenu={openRightCtx}>
+                {selectedPhotoKey ? (() => {
+                    const [pid, date] = selectedPhotoKey.split('|');
+                    const { year, monthDay } = parseRocDate(date);
+                    const projName = projectMap[pid] || '未知工地';
+                    const dayEntries = photoEntries.filter(e => e.projectId === pid && e.date === date);
+                    return (
+                        <div className="h-full flex flex-col">
+                            <div className="px-6 py-4 border-b border-gray-100">
+                                <h2 className="text-lg font-semibold text-gray-900">{projName}</h2>
+                                <p className="text-sm text-gray-400 mt-0.5">{year}/{monthDay}</p>
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-6 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {dayEntries.map(entry =>
+                                        entry.images.map((img, idx) => (
+                                            <div key={`${entry.id}-${idx}`}>
+                                                <img
+                                                    src={img.preview}
+                                                    alt=""
+                                                    onClick={() => setLightboxImg(img.preview)}
+                                                    onContextMenu={e => openPhotoCtx(e, entry.id, idx, img.preview)}
+                                                    className="w-full rounded-lg cursor-zoom-in hover:opacity-90 transition-opacity"
+                                                />
+                                                <p className="text-xs text-gray-400 mt-1.5">
+                                                    {[entry.floor, entry.direction, entry.item].filter(Boolean).join(' · ')}
+                                                </p>
+                                                {entry.content && <p className="text-xs text-gray-500 mt-0.5">{entry.content}</p>}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })() : showAddForm ? (
                     <div className="h-full flex flex-col">
                         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
                             <input type="text" value={addTitle} onChange={e => setAddTitle(e.target.value)} placeholder="筆記標題 *" className="flex-1 text-lg font-semibold text-gray-900 outline-none placeholder-gray-300" />
@@ -518,6 +721,16 @@ export function StoragePage() {
                     </div>
                 )}
             </div>
+
+            {/* Lightbox */}
+            {lightboxImg && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+                    onClick={() => setLightboxImg(null)}
+                >
+                    <img src={lightboxImg} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+                </div>
+            )}
 
             {/* 右鍵選單 */}
             <ContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />
