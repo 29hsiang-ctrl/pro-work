@@ -169,6 +169,15 @@ export function StoragePage() {
 
     const [leftWidth, onDragLeft]     = useDragResize(260, 160, 520);
 
+    const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
+    useEffect(() => {
+        const h = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', h);
+        return () => window.removeEventListener('resize', h);
+    }, []);
+    const isMobile = windowWidth < 768;
+    const mobileRightActive = !!(selectedItem || showAddForm || selectedPhotoKey);
+
     const editorRef        = useRef(null);
     const addEditorRef     = useRef(null);
     const fileInputRef     = useRef(null);
@@ -432,8 +441,8 @@ export function StoragePage() {
 
             {/* ── 左側面板 ─────────────────────────── */}
             <div
-                className="flex-shrink-0 border-r border-gray-100 bg-white flex flex-col"
-                style={{ width: leftWidth }}
+                className={`flex-col border-r border-gray-100 bg-white ${isMobile ? (mobileRightActive ? 'hidden' : 'flex w-full') : 'flex flex-shrink-0'}`}
+                style={isMobile ? undefined : { width: leftWidth }}
                 onContextMenu={e => { e.preventDefault(); openCtx(e, 'panel', null); }}
             >
                 {/* 操作按鈕 */}
@@ -630,11 +639,20 @@ export function StoragePage() {
                 </div>
             </div>
 
-            {/* 拖曳把手 */}
-            <div onMouseDown={onDragLeft} className="w-1 flex-shrink-0 bg-gray-100 hover:bg-blue-300 active:bg-blue-400 cursor-col-resize transition-colors" />
+            {/* 拖曳把手（桌機限定）*/}
+            {!isMobile && <div onMouseDown={onDragLeft} className="w-1 flex-shrink-0 bg-gray-100 hover:bg-blue-300 active:bg-blue-400 cursor-col-resize transition-colors" />}
 
             {/* ── 右側：內容區 ─────────────────────── */}
-            <div className="flex-1 overflow-y-auto bg-white select-text" onContextMenu={openRightCtx}>
+            <div
+                className={`overflow-y-auto bg-white select-text ${isMobile ? (mobileRightActive ? 'flex flex-col w-full' : 'hidden') : 'flex flex-col flex-1'}`}
+                onContextMenu={!isMobile ? openRightCtx : undefined}
+            >
+                {isMobile && mobileRightActive && (
+                    <button
+                        className="flex items-center gap-1 px-4 py-3 text-sm text-blue-500 border-b border-gray-100 bg-white sticky top-0 z-10 text-left w-full flex-shrink-0"
+                        onClick={() => { setSelectedItem(null); setShowAddForm(false); setSelectedPhotoKey(null); setEditMode(false); }}
+                    >← 返回</button>
+                )}
                 {selectedPhotoKey ? (() => {
                     const [pid, date] = selectedPhotoKey.split('|');
                     const { year, monthDay } = parseRocDate(date);

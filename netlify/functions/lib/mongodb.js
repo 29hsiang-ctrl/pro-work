@@ -1,14 +1,27 @@
 import { MongoClient } from 'mongodb';
 
-let cached = null;
+let client = null;
+let db = null;
 
 export async function getDb() {
-    if (cached) return cached;
+    if (client && db) {
+        try {
+            await db.command({ ping: 1 });
+            return db;
+        } catch {
+            client = null;
+            db = null;
+        }
+    }
     if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI not set');
-    const client = new MongoClient(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+    client = new MongoClient(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+        maxPoolSize: 1,
+    });
     await client.connect();
-    cached = client.db('prowork');
-    return cached;
+    db = client.db('prowork');
+    return db;
 }
 
 export const ok = (body) => ({

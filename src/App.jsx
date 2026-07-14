@@ -73,6 +73,7 @@ export default function App() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [savedMsg, setSavedMsg] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const reportRef = useRef(null);
 
     useEffect(() => { document.title = "PRO-WORK"; document.getElementById('loading-splash')?.remove(); }, []);
@@ -98,8 +99,8 @@ export default function App() {
     }, [entries, reportTitle]);
 
     const fetchCalendarEntries = () => {
-        if (!selectedProjectId) { setCalendarEntries([]); return; }
-        fetch(`/api/calendar?projectId=${encodeURIComponent(selectedProjectId)}`)
+        if (!selectedProjectId) { setCalendarEntries([]); return Promise.resolve(); }
+        return fetch(`/api/calendar?projectId=${encodeURIComponent(selectedProjectId)}`)
             .then(r => r.json())
             .then(data => {
                 if (Array.isArray(data)) {
@@ -140,18 +141,25 @@ export default function App() {
             const images = await Promise.all(
                 (entry.images || []).map(async img => ({ ...img, preview: await applyWatermark(img.hq || img.preview, watermarkText) }))
             );
-            return { ...entry, images, projectId: selectedProjectId };
+            return { ...entry, images, projectId: selectedProjectId, createdAt: new Date().toISOString() };
         }));
-        setCalendarEntries(prev => [...prev, ...processed]);
-        for (const entry of processed) {
-            fetch('/api/calendar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(entry),
-            }).catch(() => {});
+        setIsSaving(true);
+        try {
+            await Promise.all(processed.map(entry =>
+                fetch('/api/calendar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(entry),
+                }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+            ));
+            await fetchCalendarEntries();
+            setSavedMsg(true);
+            setTimeout(() => setSavedMsg(false), 1500);
+        } catch {
+            alert('儲存失敗，請稍後再試');
+        } finally {
+            setIsSaving(false);
         }
-        setSavedMsg(true);
-        setTimeout(() => setSavedMsg(false), 1500);
     };
 
     const handleImageUpload = async (id, e) => {
@@ -381,7 +389,7 @@ export default function App() {
                                 <button onClick={() => setEntries([...entries, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }])} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold shadow">+ 新增單筆</button>
                                 <button onClick={generateImage} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold shadow">輸出圖片</button>
                                 <button onClick={generatePDF} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow">生成 PDF</button>
-                                <button onClick={saveToCalendar} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow">儲存到日歷</button>
+                                <button onClick={saveToCalendar} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow disabled:opacity-60">{isSaving ? '儲存中...' : '儲存到日歷'}</button>
                             </div>
                         )}
                     </div>
