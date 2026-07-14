@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useProject, ITEM_TYPES, FACTORY_STEPS_BY_TYPE } from '../context/ProjectContext';
 import { useSettings } from '../context/SettingsContext';
+import * as driveSync from '../utils/driveSync';
 
 const ROLE_LABELS = {
     admin:      '管理員',
@@ -654,135 +655,72 @@ function UsersTab({ onUsersChange }) {
 // ════════════════════════════════════════════════════
 // Google Drive 同步
 // ════════════════════════════════════════════════════
-const DRIVE_CLIENT_ID = '343315337087-g0p1bbhuocrj7au9t271emgvfjmfof5r.apps.googleusercontent.com';
-
-async function driveCreateFolder(token, name, parentId) {
-    const body = { name, mimeType: 'application/vnd.google-apps.folder' };
-    if (parentId) body.parents = [parentId];
-    const res = await fetch('https://www.googleapis.com/drive/v3/files', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
-    const d = await res.json();
-    if (d.error) throw new Error(d.error.message);
-    return d.id;
-}
-
-function base64ToBlob(b64) {
-    const [hdr, data] = b64.split(',');
-    const mime = hdr.match(/:(.*?);/)[1];
-    return new Blob([Uint8Array.from(atob(data), c => c.charCodeAt(0))], { type: mime });
-}
-
-async function driveUploadFile(token, name, blob, parentId) {
-    const boundary = 'prowork_drive_boundary';
-    const meta = JSON.stringify({ name, parents: [parentId] });
-    const enc = new TextEncoder();
-    const metaPart = enc.encode(`--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${blob.type}\r\n\r\n`);
-    const closePart = enc.encode(`\r\n--${boundary}--`);
-    const fileBytes = new Uint8Array(await blob.arrayBuffer());
-    const body = new Uint8Array(metaPart.length + fileBytes.length + closePart.length);
-    body.set(metaPart); body.set(fileBytes, metaPart.length); body.set(closePart, metaPart.length + fileBytes.length);
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
-        body,
-    });
-    const d = await res.json();
-    if (d.error) throw new Error(d.error.message);
-    return d.id;
-}
-
 function DriveBackupTab() {
-    const [phase, setPhase] = useState('idle');
-    const [msg, setMsg] = useState('');
+    const [authed, setAuthed] = useState(driveSync.isTokenValid);
+    const [autoOn, setAutoOn] = useState(driveSync.isAutoSyncEnabled);
+    const [phase, setPhase]   = useState('idle');
+    const [msg, setMsg]       = useState('');
 
-    const sync = async () => {
-        setPhase('syncing'); setMsg('取得授權...');
+    const handleAuthorize = async () => {
+        const token = await driveSync.authorize();
+        setAuthed(!!token);
+        if (!token) setMsg('授權失敗，請再試一次');
+        else setMsg('');
+    };
+
+    const toggleAuto = () => {
+        const next = !autoOn;
+        driveSync.setAutoSync(next);
+        setAutoOn(next);
+        if (next && !authed) handleAuthorize();
+    };
+
+    const handleSyncAll = async () => {
+        if (!authed) { await handleAuthorize(); if (!driveSync.isTokenValid()) return; }
+        setPhase('syncing');
         try {
-            const token = await new Promise((resolve, reject) => {
-                if (!window.google?.accounts?.oauth2) return reject(new Error('Google SDK 未載入，請重新整理頁面'));
-                const client = window.google.accounts.oauth2.initTokenClient({
-                    client_id: DRIVE_CLIENT_ID,
-                    scope: 'https://www.googleapis.com/auth/drive.file',
-                    callback: r => r.error ? reject(new Error(r.error)) : resolve(r.access_token),
-                });
-                client.requestAccessToken();
-            });
-
-            setMsg('載入資料...');
-            const [photosRaw, notesRaw, initData] = await Promise.all([
-                fetch('/api/calendarPhotos').then(r => r.json()),
-                fetch('/api/storage').then(r => r.json()),
-                fetch('/api/init').then(r => r.json()),
-            ]);
-            const photos = Array.isArray(photosRaw) ? photosRaw : [];
-            const notes  = Array.isArray(notesRaw)  ? notesRaw  : [];
-            const projectMap = {};
-            (initData.projects || []).forEach(p => { projectMap[p.id] = p.name; });
-
-            setMsg('建立資料夾...');
-            const rootId    = await driveCreateFolder(token, 'prowork', null);
-            const photoRoot = await driveCreateFolder(token, '照片', rootId);
-            const noteRoot  = await driveCreateFolder(token, '筆記', rootId);
-
-            const projFolders = {}, dateFolders = {};
-            let photoCount = 0;
-            for (const entry of photos) {
-                const projName = projectMap[entry.projectId] || '未知工地';
-                if (!projFolders[entry.projectId]) {
-                    projFolders[entry.projectId] = await driveCreateFolder(token, projName, photoRoot);
-                }
-                const dateKey = `${entry.projectId}|${entry.date}`;
-                if (!dateFolders[dateKey]) {
-                    dateFolders[dateKey] = await driveCreateFolder(token, entry.date, projFolders[entry.projectId]);
-                }
-                for (let i = 0; i < (entry.images || []).length; i++) {
-                    const blob = base64ToBlob(entry.images[i].preview);
-                    const parts = [entry.date, entry.floor, entry.direction, i + 1].filter(Boolean);
-                    await driveUploadFile(token, `${parts.join('_')}.jpg`, blob, dateFolders[dateKey]);
-                    setMsg(`上傳照片... ${++photoCount} 張`);
-                }
-            }
-
-            let noteCount = 0;
-            for (const note of notes) {
-                const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${note.title || '未命名'}</title></head><body>${note.content || ''}</body></html>`;
-                await driveUploadFile(token, `${note.title || '未命名'}.html`, new Blob([html], { type: 'text/html' }), noteRoot);
-                setMsg(`上傳筆記... ${++noteCount} 筆`);
-            }
-
-            setMsg(`完成！${photoCount} 張照片、${noteCount} 筆筆記已上傳到 Google Drive「prowork」資料夾`);
+            const { photoCount, noteCount } = await driveSync.syncAll({ onProgress: setMsg });
+            setMsg(`完成！${photoCount} 張照片、${noteCount} 筆筆記已上傳`);
             setPhase('done');
         } catch (e) {
-            setMsg(e.message || '同步失敗');
-            setPhase('error');
+            setMsg(e.message || '同步失敗'); setPhase('error');
         }
     };
 
     return (
-        <div className="space-y-4 py-2">
-            <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">同步到 Google Drive</h3>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                    將所有照片（JPG）與筆記（HTML）上傳到你的 Google Drive，
-                    建立「prowork / 照片 / 工地 / 日期」與「prowork / 筆記」的資料夾結構，方便直接在 Drive 瀏覽。
-                    <br />每次同步為全量上傳（不刪除 Drive 上的舊檔案）。
-                </p>
+        <div className="space-y-5 py-2">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-gray-700">Google Drive 授權</p>
+                    <p className={`text-xs mt-0.5 ${authed ? 'text-green-500' : 'text-gray-400'}`}>
+                        {authed ? '✓ 已授權（本次工作階段有效）' : '尚未授權'}
+                    </p>
+                </div>
+                <button onClick={handleAuthorize}
+                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors">
+                    {authed ? '重新授權' : '授權 Drive'}
+                </button>
             </div>
-            {msg && (
-                <p className={`text-xs ${phase === 'error' ? 'text-red-500' : phase === 'done' ? 'text-green-600' : 'text-blue-500'}`}>
-                    {msg}
-                </p>
-            )}
-            <button
-                onClick={sync}
-                disabled={phase === 'syncing'}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
-            >
-                {phase === 'syncing' ? '同步中...' : '📤 同步到 Google Drive'}
-            </button>
+
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-gray-700">自動同步</p>
+                    <p className="text-xs text-gray-400 mt-0.5">儲存照片或筆記時自動上傳到 Drive</p>
+                </div>
+                <button onClick={toggleAuto}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${autoOn ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+            </div>
+
+            <div>
+                <p className="text-xs text-gray-400 mb-2">手動同步將所有現有資料上傳（不刪除 Drive 上的舊檔案）</p>
+                {msg && <p className={`text-xs mb-2 ${phase === 'error' ? 'text-red-500' : phase === 'done' ? 'text-green-600' : 'text-blue-500'}`}>{msg}</p>}
+                <button onClick={handleSyncAll} disabled={phase === 'syncing'}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors">
+                    {phase === 'syncing' ? '同步中...' : '📤 手動全量同步'}
+                </button>
+            </div>
         </div>
     );
 }

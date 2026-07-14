@@ -7,6 +7,7 @@ import { PlanMeasurementRecorder } from './components/PlanMeasurementRecorder';
 import { PreviewPage } from './components/PreviewPage';
 import { CalendarView } from './components/CalendarView';
 import { getROCDate, compressImage, applyWatermark } from './utils/helpers';
+import * as driveSync from './utils/driveSync';
 import { useAuth } from './context/AuthContext';
 import { usePermission } from './hooks/usePermission';
 import { LoginPage } from './pages/LoginPage';
@@ -153,6 +154,8 @@ export default function App() {
                 }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
             ));
             await fetchCalendarEntries();
+            if (driveSync.isAutoSyncEnabled())
+                processed.forEach(e => driveSync.syncEntry(e, selectedProjectName || '').catch(() => {}));
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 1500);
         } catch {

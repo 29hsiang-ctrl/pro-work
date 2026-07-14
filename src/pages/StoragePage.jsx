@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { compressImage } from '../utils/helpers';
+import * as driveSync from '../utils/driveSync';
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -270,6 +271,7 @@ export function StoragePage() {
             const created = await res.json();
             setItems(prev => [created, ...prev]);
             setSelectedItem(created);
+            if (driveSync.isAutoSyncEnabled()) driveSync.syncNote(created).catch(() => {});
         }
         setShowAddForm(false);
         setAddTitle(''); setAddCategory(''); setAddContent('');
@@ -291,6 +293,7 @@ export function StoragePage() {
             const updated = { ...selectedItem, title: editTitle, category: editCategory, content, updatedAt };
             setItems(prev => prev.map(i => i.id === selectedItem.id ? updated : i));
             setSelectedItem(updated);
+            if (driveSync.isAutoSyncEnabled()) driveSync.syncNote(updated).catch(() => {});
         }
         setEditMode(false); setSaving(false);
     };
