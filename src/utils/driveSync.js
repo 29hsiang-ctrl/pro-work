@@ -26,6 +26,7 @@ function requestToken(interactive) {
 }
 
 export const authorize = () => requestToken(true);
+export const trySilentAuth = () => requestToken(false);
 const getToken = () => isTokenValid() ? Promise.resolve(_token) : requestToken(false);
 
 async function findOrCreate(token, name, parentId) {

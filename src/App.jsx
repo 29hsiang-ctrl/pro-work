@@ -79,6 +79,14 @@ export default function App() {
 
     useEffect(() => { document.title = "PRO-WORK"; document.getElementById('loading-splash')?.remove(); }, []);
 
+    // 若已開啟自動同步，頁面載入後靜默取得 Drive token（不彈窗）
+    useEffect(() => {
+        if (!driveSync.isAutoSyncEnabled()) return;
+        const tryAuth = () => { if (window.google?.accounts?.oauth2) driveSync.trySilentAuth().catch(() => {}); };
+        if (window.google?.accounts?.oauth2) tryAuth();
+        else { const prev = window.onGoogleLibraryLoad; window.onGoogleLibraryLoad = () => { prev?.(); tryAuth(); }; }
+    }, []);
+
     // 切換工地時重新載入 site entries（在 save effect 之前定義，React 會先執行）
     useEffect(() => {
         try {

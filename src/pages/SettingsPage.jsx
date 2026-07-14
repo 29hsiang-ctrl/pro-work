@@ -661,6 +661,13 @@ function DriveBackupTab() {
     const [phase, setPhase]   = useState('idle');
     const [msg, setMsg]       = useState('');
 
+    // 頁面開啟時同步授權狀態（靜默授權可能已在背景完成）
+    useEffect(() => {
+        const update = () => setAuthed(driveSync.isTokenValid());
+        const t = setTimeout(update, 2500);
+        return () => clearTimeout(t);
+    }, []);
+
     const handleAuthorize = async () => {
         const token = await driveSync.authorize();
         setAuthed(!!token);
