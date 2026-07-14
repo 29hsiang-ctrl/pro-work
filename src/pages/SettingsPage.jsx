@@ -712,16 +712,18 @@ function DriveBackupTab() {
             });
 
             setMsg('載入資料...');
-            const [photos, notes, initData] = await Promise.all([
+            const [photosRaw, notesRaw, initData] = await Promise.all([
                 fetch('/api/calendarPhotos').then(r => r.json()),
                 fetch('/api/storage').then(r => r.json()),
                 fetch('/api/init').then(r => r.json()),
             ]);
+            const photos = Array.isArray(photosRaw) ? photosRaw : [];
+            const notes  = Array.isArray(notesRaw)  ? notesRaw  : [];
             const projectMap = {};
             (initData.projects || []).forEach(p => { projectMap[p.id] = p.name; });
 
             setMsg('建立資料夾...');
-            const rootId    = await driveCreateFolder(token, 'ProWork', null);
+            const rootId    = await driveCreateFolder(token, 'prowork', null);
             const photoRoot = await driveCreateFolder(token, '照片', rootId);
             const noteRoot  = await driveCreateFolder(token, '筆記', rootId);
 
@@ -751,7 +753,7 @@ function DriveBackupTab() {
                 setMsg(`上傳筆記... ${++noteCount} 筆`);
             }
 
-            setMsg(`完成！${photoCount} 張照片、${noteCount} 筆筆記已上傳到 Google Drive「ProWork」資料夾`);
+            setMsg(`完成！${photoCount} 張照片、${noteCount} 筆筆記已上傳到 Google Drive「prowork」資料夾`);
             setPhase('done');
         } catch (e) {
             setMsg(e.message || '同步失敗');
@@ -765,7 +767,7 @@ function DriveBackupTab() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-1">同步到 Google Drive</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">
                     將所有照片（JPG）與筆記（HTML）上傳到你的 Google Drive，
-                    建立「ProWork / 照片 / 工地 / 日期」與「ProWork / 筆記」的資料夾結構，方便直接在 Drive 瀏覽。
+                    建立「prowork / 照片 / 工地 / 日期」與「prowork / 筆記」的資料夾結構，方便直接在 Drive 瀏覽。
                     <br />每次同步為全量上傳（不刪除 Drive 上的舊檔案）。
                 </p>
             </div>
