@@ -138,14 +138,8 @@ export default function App() {
     };
 
     const saveToCalendar = async () => {
-        const existingIds = new Set(calendarEntries.map(e => e.id));
-        const toAdd = entries.filter(e => !existingIds.has(e.id));
-        if (toAdd.length === 0) {
-            setEntries([defaultEntry()]);
-            setSavedMsg(true);
-            setTimeout(() => setSavedMsg(false), 1500);
-            return;
-        }
+        const toAdd = entries.filter(e => (e.images || []).length > 0);
+        if (toAdd.length === 0) return;
         const processed = await Promise.all(toAdd.map(async entry => {
             const watermarkText = [entry.date, entry.floor, entry.direction, entry.item, entry.content].filter(Boolean).join('-');
             const images = await Promise.all(
