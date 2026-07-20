@@ -141,6 +141,7 @@ export default function App() {
         const existingIds = new Set(calendarEntries.map(e => e.id));
         const toAdd = entries.filter(e => !existingIds.has(e.id));
         if (toAdd.length === 0) {
+            setEntries([defaultEntry()]);
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 1500);
             return;
