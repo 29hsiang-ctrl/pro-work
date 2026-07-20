@@ -1,5 +1,6 @@
 const CLIENT_ID = '343315337087-g0p1bbhuocrj7au9t271emgvfjmfof5r.apps.googleusercontent.com';
 const AUTO_SYNC_KEY = 'prowork_drive_auto_sync';
+const HINT_KEY = 'prowork_drive_hint';
 
 let _token = null, _tokenExpiry = 0;
 let _rootId = null, _photoRootId = null, _noteRootId = null;
@@ -15,10 +16,18 @@ function requestToken(interactive) {
         window.google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: 'https://www.googleapis.com/auth/drive.file',
+            hint: localStorage.getItem(HINT_KEY) || undefined,
             callback: r => {
                 if (r.error || !r.access_token) return resolve(null);
                 _token = r.access_token;
                 _tokenExpiry = Date.now() + ((r.expires_in ?? 3600) - 120) * 1000;
+                if (!localStorage.getItem(HINT_KEY)) {
+                    fetch('https://www.googleapis.com/oauth2/v3/userinfo',
+                        { headers: { Authorization: `Bearer ${r.access_token}` } })
+                        .then(res => res.json())
+                        .then(info => { if (info.email) localStorage.setItem(HINT_KEY, info.email); })
+                        .catch(() => {});
+                }
                 resolve(_token);
             },
         }).requestAccessToken({ prompt: interactive ? 'consent' : '' });

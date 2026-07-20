@@ -164,6 +164,7 @@ export default function App() {
             await fetchCalendarEntries();
             if (driveSync.isAutoSyncEnabled())
                 processed.forEach(e => driveSync.syncEntry(e, selectedProjectName || '').catch(() => {}));
+            setEntries([defaultEntry()]);
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 1500);
         } catch {
