@@ -86,7 +86,7 @@ function formatSelectedDate(date) {
     return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日 (${weekdays[date.getDay()]})`;
 }
 
-export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, onAddEntry, onRefresh }) {
+export function CalendarView({ entries = [], projectMap = {}, onDeleteEntry, jumpDate, onJumped, onAddEntry, onRefresh }) {
     const today = new Date();
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth());
@@ -237,6 +237,11 @@ export function CalendarView({ entries = [], onDeleteEntry, jumpDate, onJumped, 
                 ) : (
                     selectedEntries.map(e => (
                         <div key={e.id} className="border-b border-gray-100 pb-4">
+                            {projectMap[e.projectId] && (
+                                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mb-2 inline-block">
+                                    {projectMap[e.projectId]}
+                                </span>
+                            )}
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium px-3 py-1 rounded-full border border-gray-300 text-gray-600">照片黏貼</span>
                                 <div className="flex items-center gap-2">

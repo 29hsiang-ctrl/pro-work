@@ -46,8 +46,9 @@ export default function App() {
     const { canAccess } = usePermission();
     const { loading: dbLoading, dbError, hasCachedData, selectedProjectId, projects } = useProject();
     const selectedProjectName = projects.find(p => p.id === selectedProjectId)?.name;
+    const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
     const siteKey = `site_report_data_${selectedProjectId || 'default'}`;
-    const calendarCacheKey = `prowork_calendar_cache_${selectedProjectId || 'none'}`;
+    const calendarCacheKey = 'prowork_calendar_cache_all';
     const [mainSection, setMainSection] = useState('dashboard');
     const [view, setView] = useState('photo');
     const [menuOpen, setMenuOpen] = useState(false);
@@ -66,8 +67,7 @@ export default function App() {
     const [reportTitle, setReportTitle] = useState(() => localStorage.getItem('site_report_title') || '施工照片');
     const [calendarEntries, setCalendarEntries] = useState(() => {
         try {
-            const pid = localStorage.getItem('prowork_selected_project') || 'none';
-            const raw = localStorage.getItem(`prowork_calendar_cache_${pid}`);
+            const raw = localStorage.getItem('prowork_calendar_cache_all');
             return raw ? JSON.parse(raw) : [];
         } catch { return []; }
     });
@@ -108,8 +108,7 @@ export default function App() {
     }, [entries, reportTitle]);
 
     const fetchCalendarEntries = () => {
-        if (!selectedProjectId) { setCalendarEntries([]); return Promise.resolve(); }
-        return fetch(`/api/calendar?projectId=${encodeURIComponent(selectedProjectId)}`)
+        return fetch('/api/calendar')
             .then(r => r.json())
             .then(data => {
                 if (Array.isArray(data)) {
@@ -119,12 +118,8 @@ export default function App() {
             }).catch(() => {});
     };
 
-    useEffect(() => {
-        const raw = localStorage.getItem(calendarCacheKey);
-        setCalendarEntries(raw ? JSON.parse(raw) : []);
-        fetchCalendarEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedProjectId]);
+    useEffect(() => { fetchCalendarEntries(); }, []);
 
     useEffect(() => {
         if (mainSection === 'calendar' || (mainSection === 'site' && view === 'calendar')) {
@@ -370,7 +365,7 @@ export default function App() {
                         </button>
                     ))}
                     <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-3">
-                        {selectedProjectName && activeSection !== 'settings' && (
+                        {selectedProjectName && activeSection !== 'settings' && activeSection !== 'calendar' && activeSection !== 'storage' && (
                             <span className="hidden sm:inline-flex px-3 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
                                 {selectedProjectName}
                             </span>
@@ -379,7 +374,7 @@ export default function App() {
                         <button onClick={logout} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">登出</button>
                     </div>
                 </div>
-                {selectedProjectName && activeSection !== 'settings' && (
+                {selectedProjectName && activeSection !== 'settings' && activeSection !== 'calendar' && activeSection !== 'storage' && (
                     <div className="sm:hidden bg-gray-50 border-t border-gray-100 px-4 py-1.5 text-xs text-gray-500 text-center">
                         目前工地：<span className="font-medium text-gray-700">{selectedProjectName}</span>
                     </div>
@@ -449,7 +444,7 @@ export default function App() {
                 ) : view === 'codePlan' ? (
                     <PlanMeasurementRecorder key="planMeasure" defaultTitle="代號量測尺寸" />
                 ) : view === 'calendar' ? (
-                    <CalendarView entries={calendarEntries} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
+                    <CalendarView entries={calendarEntries} projectMap={projectMap} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setView('photo'); }} />
                 ) : (
                     <CodeMeasurementRecorder key="codeMeasure" defaultTitle="代號量測尺寸" />
                 )}
@@ -458,7 +453,7 @@ export default function App() {
                 {savedMsg && <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-lg font-sans pointer-events-none">已儲存到日曆</div>}
             </div>
             ) : activeSection === 'calendar' ? (
-                <CalendarView entries={calendarEntries} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
+                <CalendarView entries={calendarEntries} projectMap={projectMap} onRefresh={fetchCalendarEntries} onDeleteEntry={deleteCalendarEntry} jumpDate={calendarJumpDate} onJumped={() => setCalendarJumpDate(null)} onAddEntry={() => { setEntries(prev => [...prev, {id: Date.now(), date: getROCDate(), floor:'', direction:'', item:'', content:'', images:[] }]); setMainSection('site'); setView('photo'); }} />
             ) : activeSection === 'dashboard' ? (
                 <DashboardPage />
             ) : activeSection === 'drawing' ? (
