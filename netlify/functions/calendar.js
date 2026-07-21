@@ -10,7 +10,8 @@ export const handler = async (event) => {
             case 'GET': {
                 const projectId = event.queryStringParameters?.projectId;
                 const query = projectId ? { projectId } : {};
-                const entries = await col.find(query).sort({ createdAt: 1 }).toArray();
+                const entries = await col.find(query).toArray();
+                entries.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
                 return ok(entries.map(({ _id, ...r }) => ({ id: _id, ...r })));
             }
             case 'POST': {

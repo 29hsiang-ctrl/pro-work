@@ -12,7 +12,8 @@ export const handler = async (event) => {
         const col = db.collection('calendarEntries');
 
         if (event.httpMethod === 'GET') {
-            const docs = await col.find({ 'images.0': { $exists: true } }).sort({ date: -1 }).toArray();
+            const docs = await col.find({ 'images.0': { $exists: true } }).toArray();
+            docs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
             return ok(docs.map(({ _id, images, ...rest }) => ({
                 id: _id,
                 projectId: rest.projectId,
