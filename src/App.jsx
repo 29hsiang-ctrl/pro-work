@@ -138,6 +138,7 @@ export default function App() {
     };
 
     const saveToCalendar = async () => {
+        if (!selectedProjectId) { alert('請先選擇工地'); return; }
         const toAdd = entries.filter(e => (e.images || []).length > 0);
         if (toAdd.length === 0) return;
         const processed = await Promise.all(toAdd.map(async entry => {

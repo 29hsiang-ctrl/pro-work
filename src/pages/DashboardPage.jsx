@@ -84,7 +84,7 @@ export function DashboardPage() {
                         {projectSummary.map(p => (
                             <div
                                 key={p.id}
-                                onClick={() => setSelectedProjectId(p.id === selectedProjectId ? null : p.id)}
+                                onClick={() => setSelectedProjectId(p.id)}
                                 className={`bg-white rounded-2xl border shadow-sm overflow-hidden cursor-pointer transition-all ${p.id === selectedProjectId ? 'border-gray-800 ring-2 ring-gray-800' : 'border-gray-100'}`}
                             >
                                 <div className="p-5">
