@@ -656,14 +656,14 @@ function UsersTab({ onUsersChange }) {
 // Google Drive 同步
 // ════════════════════════════════════════════════════
 function DriveBackupTab() {
-    const [authed, setAuthed] = useState(driveSync.isTokenValid);
+    const [authed, setAuthed] = useState(() => driveSync.isTokenValid() || driveSync.hasPreviousAuth());
     const [autoOn, setAutoOn] = useState(driveSync.isAutoSyncEnabled);
     const [phase, setPhase]   = useState('idle');
     const [msg, setMsg]       = useState('');
 
     // 頁面開啟時同步授權狀態（靜默授權可能已在背景完成）
     useEffect(() => {
-        const update = () => setAuthed(driveSync.isTokenValid());
+        const update = () => setAuthed(driveSync.isTokenValid() || driveSync.hasPreviousAuth());
         const t = setTimeout(update, 2500);
         return () => clearTimeout(t);
     }, []);
@@ -700,7 +700,7 @@ function DriveBackupTab() {
                 <div>
                     <p className="text-sm font-semibold text-gray-700">Google Drive 授權</p>
                     <p className={`text-xs mt-0.5 ${authed ? 'text-green-500' : 'text-gray-400'}`}>
-                        {authed ? '✓ 已授權（本次工作階段有效）' : '尚未授權'}
+                        {authed ? '✓ 已授權' : '尚未授權'}
                     </p>
                 </div>
                 <button onClick={handleAuthorize}

@@ -1,4 +1,5 @@
 import { createContext, useState, useContext } from 'react';
+import * as driveSync from '../utils/driveSync';
 
 export const ROLES = {
     admin:      { label: '管理員',   pages: ['dashboard','drawing','site','factory','storage','calendar','settings'] },
@@ -59,6 +60,7 @@ export function AuthProvider({ children }) {
             if (!res.ok) return { ok: false, error: data.error || 'Google 登入失敗' };
             if (data.needLink) return { ok: false, needLink: true, googleEmail: data.googleEmail };
             persistUser(data, remember);
+            driveSync.trySilentAuth().catch(() => {});
             return { ok: true };
         } catch {
             return { ok: false, error: '伺服器連線失敗，請稍後再試' };

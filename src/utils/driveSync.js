@@ -9,6 +9,7 @@ const _projFolders = {}, _dateFolders = {};
 export const isAutoSyncEnabled = () => localStorage.getItem(AUTO_SYNC_KEY) === '1';
 export const setAutoSync = v => localStorage.setItem(AUTO_SYNC_KEY, v ? '1' : '0');
 export const isTokenValid = () => !!_token && Date.now() < _tokenExpiry;
+export const hasPreviousAuth = () => !!localStorage.getItem(HINT_KEY);
 
 function requestToken(interactive) {
     return new Promise(resolve => {
@@ -34,7 +35,13 @@ function requestToken(interactive) {
     });
 }
 
-export const authorize = () => requestToken(true);
+export async function authorize() {
+    if (localStorage.getItem(HINT_KEY)) {
+        const t = await requestToken(false);
+        if (t) return t;
+    }
+    return requestToken(true);
+}
 export const trySilentAuth = () => requestToken(false);
 const getToken = () => isTokenValid() ? Promise.resolve(_token) : requestToken(false);
 
