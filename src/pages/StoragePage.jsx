@@ -122,6 +122,7 @@ export function StoragePage() {
     const [items, setItems]           = useState([]);
     const [folders, setFolders]       = useState([]);
     const [loading, setLoading]       = useState(true);
+    const [photosLoading, setPhotosLoading] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const [editMode, setEditMode]     = useState(false);
     const [editTitle, setEditTitle]   = useState('');
@@ -192,17 +193,27 @@ export function StoragePage() {
         Promise.all([
             fetch('/api/storage').then(r => r.ok ? r.json() : []),
             fetch('/api/storageFolders').then(r => r.ok ? r.json() : []),
-            fetch('/api/calendarPhotos').then(r => r.ok ? r.json() : []),
             fetch('/api/init').then(r => r.ok ? r.json() : {}),
-        ]).then(([its, fds, photos, initData]) => {
+        ]).then(([its, fds, initData]) => {
             setItems(its);
             setFolders(fds);
-            setPhotoEntries(photos);
             const pmap = {};
             (initData.projects || []).forEach(p => { pmap[p.id] = p.name; });
             setProjectMap(pmap);
         }).finally(() => setLoading(false));
     }, []);
+
+    // 點開照片資料夾時才載入（base64 照片資料量大，延遲載入避免阻塞）
+    const loadPhotos = useCallback(async () => {
+        if (photoEntries.length > 0 || photosLoading) return;
+        setPhotosLoading(true);
+        try {
+            const raw = await fetch('/api/calendarPhotos').then(r => r.ok ? r.json() : []);
+            setPhotoEntries(Array.isArray(raw) ? raw : []);
+        } finally {
+            setPhotosLoading(false);
+        }
+    }, [photoEntries.length, photosLoading]);
 
     useEffect(() => { if (renamingId && renameInputRef.current) renameInputRef.current.focus(); }, [renamingId]);
     useEffect(() => { if (creatingFolder && newFolderRef.current) newFolderRef.current.focus(); }, [creatingFolder]);
@@ -471,7 +482,7 @@ export function StoragePage() {
                         return (
                             <div>
                                 <div
-                                    onClick={() => setPhotoOpen(p => !p)}
+                                    onClick={() => { setPhotoOpen(p => !p); loadPhotos(); }}
                                     className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50 text-gray-600 transition-colors"
                                 >
                                     <span className="flex items-center gap-1.5 text-sm">
@@ -483,7 +494,9 @@ export function StoragePage() {
                                 </div>
                                 {photoOpen && (
                                     <div className="ml-4 border-l border-gray-100">
-                                        {projectIds.length === 0 ? (
+                                        {photosLoading ? (
+                                            <p className="text-xs text-gray-300 px-3 py-2">載入照片中...</p>
+                                        ) : projectIds.length === 0 ? (
                                             <p className="text-xs text-gray-300 px-3 py-2">尚無照片</p>
                                         ) : projectIds.map(pid => {
                                             const projName = projectMap[pid] || '未知工地';
