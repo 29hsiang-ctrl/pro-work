@@ -11,6 +11,12 @@
   targetPort = 3000
   framework = "#custom"
 
+[[redirects]]
+  from = "/api/*"
+  to = "https://pro-work-t7lp.onrender.com/api/:splat"
+  status = 200
+  force = true
+
 # SPA fallback（必須放最後）
 [[redirects]]
   from = "/*"
